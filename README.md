@@ -157,16 +157,40 @@ library, which is machinery rather than content.
 
 ## Layout controls
 
-Behind the **Controls** button. All saved to `localStorage`, so they are
-per-browser.
+A force layout you cannot tune is a layout you are stuck with, so every force is
+exposed. The **Controls** button opens this panel; changes apply live and are
+saved to `localStorage`, so they are per-browser.
 
-Repulsion, link distance, link rigidity, node spacing, gravity, node size,
-label cutoff, show labels, show unresolved, pin nodes on drop, freeze layout.
+![Layout controls](docs/screenshot-controls.png)
+
+| Control | What it does |
+|---|---|
+| **Repulsion** | How hard nodes push each other apart. The main "spread it out" knob. |
+| **Link distance** | Preferred length of each edge. |
+| **Link rigidity** | How strictly edges hold that length. Low is loose and organic. |
+| **Node spacing** | Minimum clear space around each node, on top of its radius. |
+| **Gravity** | Pull toward the centre. Raise it to gather orphan pages in. |
+| **Node size** | Multiplier on node radius. |
+| **Label cutoff** | Hide labels for pages with fewer links than this. `0` shows everything. |
+| **Show labels** | Master label toggle. |
+| **Show unresolved** | Include the hollow broken-link nodes. |
+| **Pin nodes where I drop them** | Off: a dragged node springs back into the layout, like Obsidian. On: it stays put. |
+| **Freeze layout** | Stop the simulation. Nodes stay where they are and stop drifting. |
+
+Plus **Unpin all nodes** and **Reset to defaults**.
+
+Drag a node to move it. By default it rejoins the layout on release; with
+pinning on it stays put, marked with a thin ring. Double-click a node to unpin
+it, or double-click empty space to unpin everything. Dragging works while the
+layout is frozen too, so you can hand-arrange a static diagram.
+
+There is a small `ms/frame` readout in the bottom right, so you can see what a
+setting actually costs before committing to it.
 
 ## Theming
 
 Light and dark, with a **Theme** button in the toolbar cycling
-`auto` (follow the OS) → `light` → `dark`. The choice is saved per browser.
+`auto` (follow the OS) -> `light` -> `dark`. The choice is saved per browser.
 
 Any view also accepts a `?theme=light|dark` query parameter, which overrides the
 saved setting for that page load. This is how you pin the embedded preview:
@@ -182,10 +206,6 @@ That parameter exists for a specific reason. The preview runs in an iframe on a
 **different origin** from SilverBullet, so it cannot read the host page's theme;
 left on `auto` it follows the reader's OS, which may not match the SilverBullet
 theme it is sitting inside.
-
-Drag a node to move it. By default it rejoins the layout on release; turn on
-**Pin nodes where I drop them** and it stays put, marked with a ring.
-Double-click a node to unpin it, or empty space to unpin everything.
 
 ## Notes for anyone hacking on it
 

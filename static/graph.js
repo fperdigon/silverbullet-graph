@@ -277,7 +277,10 @@
           var m = state.nodes[i];
           var near = state.hover && (m.id === state.hover || hot.has(m.id));
           if (state.hover && !near) continue;
-          if (!near && m.degree < P.labelDegree) continue;
+          // The full view's "Label cutoff" control lets hub labels stay on
+          // permanently; the small embedded preview has no room for that and
+          // reads as clutter, so there labels appear only on hover.
+          if (!near && (compact || m.degree < P.labelDegree)) continue;
           if (hasQuery && state.queryMiss.has(m.id)) continue;
           ctx.fillStyle = near ? theme.fg : theme.muted;
           ctx.fillText(m.title, m.x, m.y - radius(m) - 2 / t.k);

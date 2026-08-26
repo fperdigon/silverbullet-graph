@@ -9,6 +9,11 @@ folder and sized by how many links it has. It runs alongside SilverBullet,
 reads the space through SilverBullet's own HTTP API, and updates incrementally
 as you write.
 
+![The graph view](docs/screenshot.png)
+
+*Rendered from the bundled demo space. Every page name in that screenshot is
+invented; see [Try it without SilverBullet](#try-it-without-silverbullet).*
+
 Tested against SilverBullet **2.9.0**.
 
 ## What you get
@@ -39,6 +44,21 @@ handled the same way.
 
 A full reparse happens on a cold cache or on an explicit `POST /api/rebuild`,
 and nowhere else.
+
+## Try it without SilverBullet
+
+There is a self-contained demo that serves the UI against a synthetic space, so
+you can see the thing working, or hack on the front-end, with nothing else
+running:
+
+```sh
+python3 demo/demo_server.py        # then open http://localhost:8899/
+```
+
+It builds 80 invented pages across six folders, with hub pages, a journal that
+threads through everything, and three deliberately dangling links so the hollow
+"unresolved" style is visible. The generator is seeded, so the graph is
+identical on every run. Standard library only, no dependencies.
 
 ## Quick start
 

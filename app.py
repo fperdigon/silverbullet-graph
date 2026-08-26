@@ -14,12 +14,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import io
 import json
 import logging
 import os
 import time
-import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
@@ -30,7 +28,6 @@ from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     PlainTextResponse,
-    Response,
     StreamingResponse,
 )
 from fastapi.staticfiles import StaticFiles
@@ -270,36 +267,6 @@ async def refresh_pages(
     return changed
 
 
-async def export_zip() -> bytes:
-    """Zip up the current page set as plain .md files, folder structure intact.
-
-    Re-fetches every page's raw text rather than reading GRAPH.pages, which
-    only ever holds parsed links, never the body.
-    """
-    pages = sorted(GRAPH.pages)
-    sem = asyncio.Semaphore(CONCURRENCY)
-    bodies: dict[str, str] = {}
-
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        async def one(p: str) -> None:
-            async with sem:
-                try:
-                    text = await sb_read(client, p)
-                except Exception as exc:
-                    LOG.warning("export fetch failed for %s: %s", p, exc)
-                    return
-            if text is not None:
-                bodies[p] = text
-
-        await asyncio.gather(*(one(p) for p in pages))
-
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for p in sorted(bodies):
-            zf.writestr(f"{p}.md", bodies[p])
-    return buf.getvalue()
-
-
 async def reconcile(force: bool = False) -> dict:
     """List the space once; refetch only files whose mtime/size moved."""
     async with GRAPH.lock:
@@ -398,16 +365,6 @@ async def api_notify(request: Request) -> dict:
 @app.post("/api/rebuild")
 async def api_rebuild() -> dict:
     return await reconcile(force=True)
-
-
-@app.get("/api/export")
-async def api_export() -> Response:
-    data = await export_zip()
-    return Response(
-        content=data,
-        media_type="application/zip",
-        headers={"Content-Disposition": 'attachment; filename="silverbullet-export.zip"'},
-    )
 
 
 @app.get("/api/events")

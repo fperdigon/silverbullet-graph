@@ -14,7 +14,6 @@
     <button id="reset">Fit view</button>
     <button id="refresh">Refresh</button>
     <button id="toggle-panel" title="Layout controls">Controls</button>
-    <button id="download" title="Download every page as a zip of its original Markdown files">Download</button>
     <button id="theme" title="Theme: follow system, light, or dark">Theme: auto</button>
     <span class="spacer"></span>
     <span class="stats" id="stats">loading...</span>
@@ -207,11 +206,6 @@
     fetch("api/rebuild", { method: "POST" })
       .then(function () { return view.load(); })
       .catch(function (e) { console.warn(e); });
-  });
-  document.getElementById("download").addEventListener("click", function () {
-    // A plain navigation, not fetch+blob: the server's Content-Disposition
-    // header makes the browser download it without leaving this page.
-    window.location.href = "api/export";
   });
 
   /* ---- theme toggle: auto -> light -> dark ---- */

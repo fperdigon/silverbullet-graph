@@ -25,6 +25,9 @@ Tested against SilverBullet **2.9.0**.
 - **Live updates.** A page save pushes a webhook and only that page is reparsed.
 - **Broken-link detection.** Wikilinks pointing at pages that do not exist are
   drawn as hollow, dashed nodes.
+- **Download.** The **Download** button (both views) fetches every page fresh
+  from SilverBullet and zips up the original `.md` files, folder structure
+  intact — a quick backup or export, no SilverBullet access required.
 - **Canvas renderer**, so a few thousand edges stay at 60fps and the page does
   no work at all once the layout settles.
 - Works with mouse and touch: drag nodes, pinch, pan.
@@ -152,6 +155,7 @@ library, which is machinery rather than content.
 | `/api/graph` | nodes, links and stats as JSON |
 | `/api/notify` | `POST {"page": "..."}` — refetch one page |
 | `/api/rebuild` | `POST` — force a full reparse |
+| `/api/export` | zip of every page's original `.md`, folder structure intact |
 | `/api/events` | SSE; open views redraw on change |
 | `/healthz` | page count, version, asset hash |
 

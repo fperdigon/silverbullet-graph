@@ -12,9 +12,11 @@ Every page name below is invented. Run it and open http://localhost:8899/
 """
 from __future__ import annotations
 
+import io
 import json
 import random
 import sys
+import zipfile
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -155,11 +157,26 @@ def graph_payload() -> dict:
     }
 
 
+def export_zip() -> bytes:
+    """Stand-in for app.py's export_zip: no real page bodies exist in the demo
+    space (only names + links), so fabricate a minimal body for each."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, links in SPACE.items():
+            body = "# %s\n\n" % name.rsplit("/", 1)[-1]
+            for target in links:
+                body += "- [[%s]]\n" % target
+            zf.writestr(name + ".md", body)
+    return buf.getvalue()
+
+
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         path = self.path.split("?", 1)[0]
         if path == "/api/graph":
             return self._json(graph_payload())
+        if path == "/api/export":
+            return self._zip(export_zip())
         if path == "/healthz":
             return self._text("ok demo pages=%d" % len(SPACE))
         if path == "/api/events":
@@ -191,6 +208,14 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _zip(self, data):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/zip")
+        self.send_header("Content-Disposition", 'attachment; filename="silverbullet-export.zip"')
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def _text(self, s):
         body = s.encode()

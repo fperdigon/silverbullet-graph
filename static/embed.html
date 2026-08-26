@@ -12,6 +12,7 @@
   <div class="embed-bar">
     <button type="button" id="reset-view" title="Re-fit the graph to the frame">reset view</button>
     <button type="button" id="toggle-panel" title="Layout controls">controls</button>
+    <button type="button" id="download" title="Download every page as a zip of its original Markdown files">download</button>
     <a href="./" target="_blank" rel="noopener">open full graph</a>
   </div>
 
@@ -47,6 +48,9 @@
   });
   document.getElementById("reset-view").addEventListener("click", function () {
     view.reset();
+  });
+  document.getElementById("download").addEventListener("click", function () {
+    window.location.href = "api/export";
   });
 
   /* ---- layout controls: label + feel, not spacing ----

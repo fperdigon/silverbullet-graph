@@ -9,8 +9,12 @@
   --accent: #3b6fd4;
 }
 
+/* Three-state theming. Bare :root is the light palette. The OS preference
+   applies only when the user has not chosen explicitly, and an explicit
+   data-theme wins in both directions. Never give a colour its only definition
+   inside a media query, or the toggle cannot override it. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #1c1e22;
     --panel: #24272c;
     --border: #34383f;
@@ -20,6 +24,17 @@
     --link-hot: #8d97a5;
     --accent: #7c9fe8;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1c1e22;
+  --panel: #24272c;
+  --border: #34383f;
+  --fg: #e4e6ea;
+  --muted: #99a0ab;
+  --link: #3b4048;
+  --link-hot: #8d97a5;
+  --accent: #7c9fe8;
 }
 
 * { box-sizing: border-box; }
@@ -175,6 +190,9 @@ button:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ---------- embedded preview ---------- */
 body.embed { background: transparent; }
+/* When a theme is pinned via ?theme=, the preview must paint its own ground
+   rather than borrowing the host page's. */
+:root[data-theme] body.embed { background: var(--bg); }
 body.embed #graph { position: absolute; inset: 0; }
 /* NOTE: the preview's touch-action is set from JS, not here. d3-zoom writes
    `touch-action: none` inline on the canvas, and an inline style beats any

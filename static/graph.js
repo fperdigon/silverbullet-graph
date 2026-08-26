@@ -26,6 +26,35 @@
   };
 
   var STORE_KEY = "sb-graph:params";
+  var THEME_KEY = "sb-graph:theme";   // "auto" | "light" | "dark"
+
+  /* Applying a theme means stamping data-theme on <html>; "auto" removes it and
+     lets prefers-color-scheme decide. Listeners let the canvas re-read colours,
+     which it cannot get from CSS classes. */
+  var themeListeners = [];
+  var forcedTheme = null;   // set by ?theme=, wins until the user clicks
+
+  function applyTheme(mode) {
+    var root = document.documentElement;
+    if (mode === "light" || mode === "dark") root.setAttribute("data-theme", mode);
+    else root.removeAttribute("data-theme");
+    for (var i = 0; i < themeListeners.length; i++) themeListeners[i]();
+  }
+
+  function currentTheme() {
+    if (forcedTheme) return forcedTheme;
+    try {
+      return (global.localStorage && global.localStorage.getItem(THEME_KEY)) || "auto";
+    } catch (e) { return "auto"; }
+  }
+
+  function setTheme(mode) {
+    forcedTheme = null;      // an explicit click overrides the URL parameter
+    try {
+      if (global.localStorage) global.localStorage.setItem(THEME_KEY, mode);
+    } catch (e) { /* non-fatal */ }
+    applyTheme(mode);
+  }
 
   var srcId = function (l) { return typeof l.source === "object" ? l.source.id : l.source; };
   var dstId = function (l) { return typeof l.target === "object" ? l.target.id : l.target; };
@@ -99,6 +128,7 @@
       theme.muted = cs.getPropertyValue("--muted").trim() || "#6b7280";
     }
     readTheme();
+    themeListeners.push(function () { readTheme(); scheduleDraw(); });
     if (global.matchMedia) {
       var mq = global.matchMedia("(prefers-color-scheme: dark)");
       var onScheme = function () { readTheme(); scheduleDraw(); };
@@ -613,9 +643,25 @@
         return Array.from(m, function (e) { return { name: e[0], col: e[1] }; })
           .sort(function (a, b) { return a.name.localeCompare(b.name); });
       },
-      reset: function () { state.userMoved = false; fit(400); }
+      reset: function () { state.userMoved = false; fit(400); },
+      theme: currentTheme,
+      setTheme: setTheme
     };
   }
 
+  /* Applied before first paint so the page never flashes the wrong palette.
+     ?theme= wins over the stored value: it is how the embedded preview is
+     pinned to match the host page, which it cannot detect across origins. */
+  (function () {
+    var forced = null;
+    try {
+      var m = /[?&]theme=(auto|light|dark)\b/.exec(global.location.search || "");
+      if (m) forced = m[1];
+    } catch (e) { /* ignore */ }
+    if (forced) forcedTheme = forced;
+    applyTheme(currentTheme());
+  })();
+
   global.GraphView = GraphView;
+  global.SBGraphTheme = { get: currentTheme, set: setTheme, apply: applyTheme };
 })(window);

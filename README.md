@@ -9,9 +9,11 @@ folder and sized by how many links it has. It runs alongside SilverBullet,
 reads the space through SilverBullet's own HTTP API, and updates incrementally
 as you write.
 
-![The graph view](docs/screenshot.png)
+| Light | Dark |
+|---|---|
+| ![Light theme](docs/screenshot.png) | ![Dark theme](docs/screenshot-dark.png) |
 
-*Rendered from the bundled demo space. Every page name in that screenshot is
+*Rendered from the bundled demo space. Every page name in those screenshots is
 invented; see [Try it without SilverBullet](#try-it-without-silverbullet).*
 
 Tested against SilverBullet **2.9.0**.
@@ -160,6 +162,26 @@ per-browser.
 
 Repulsion, link distance, link rigidity, node spacing, gravity, node size,
 label cutoff, show labels, show unresolved, pin nodes on drop, freeze layout.
+
+## Theming
+
+Light and dark, with a **Theme** button in the toolbar cycling
+`auto` (follow the OS) → `light` → `dark`. The choice is saved per browser.
+
+Any view also accepts a `?theme=light|dark` query parameter, which overrides the
+saved setting for that page load. This is how you pin the embedded preview:
+
+```markdown
+${widget.html(dom.iframe {
+  src = "https://graph.example.com/embed?theme=dark",
+  ...
+})}
+```
+
+That parameter exists for a specific reason. The preview runs in an iframe on a
+**different origin** from SilverBullet, so it cannot read the host page's theme;
+left on `auto` it follows the reader's OS, which may not match the SilverBullet
+theme it is sitting inside.
 
 Drag a node to move it. By default it rejoins the layout on release; turn on
 **Pin nodes where I drop them** and it stays put, marked with a ring.

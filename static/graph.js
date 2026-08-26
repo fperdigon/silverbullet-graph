@@ -81,15 +81,20 @@
   function GraphView(opts) {
     var el = document.querySelector(opts.container);
     var compact = !!opts.compact;
-    // The compact preview deliberately ignores saved settings: it is a fixed
-    // thumbnail, and inheriting the full view's sliders made it sprawl off-frame.
-    var P = compact ? Object.assign({}, DEFAULTS) : loadParams();
-    if (compact) {
+    // Label settings (showLabels, labelDegree, ...) are shared with the full
+    // view via localStorage, so the embed reads the same as whatever you last
+    // set there. Only layout density is forced: the full view's spacing
+    // sprawls a small iframe off-frame, so those three stay fixed regardless
+    // of what is saved.
+    var P = loadParams();
+    function applyCompactDensity() {
+      if (!compact) return;
       P.linkDistance = 26;
       P.charge = -55;
       P.collide = 3;
       P.showUnresolved = false;
     }
+    applyCompactDensity();
 
     var state = {
       nodes: [], links: [],
@@ -277,10 +282,7 @@
           var m = state.nodes[i];
           var near = state.hover && (m.id === state.hover || hot.has(m.id));
           if (state.hover && !near) continue;
-          // The full view's "Label cutoff" control lets hub labels stay on
-          // permanently; the small embedded preview has no room for that and
-          // reads as clutter, so there labels appear only on hover.
-          if (!near && (compact || m.degree < P.labelDegree)) continue;
+          if (!near && m.degree < P.labelDegree) continue;
           if (hasQuery && state.queryMiss.has(m.id)) continue;
           ctx.fillStyle = near ? theme.fg : theme.muted;
           ctx.fillText(m.title, m.x, m.y - radius(m) - 2 / t.k);
@@ -629,6 +631,7 @@
       resetParams: function () {
         for (var k in DEFAULTS) P[k] = DEFAULTS[k];
         saveParams(P);
+        applyCompactDensity();
         state.userMoved = false;
         build();
       },

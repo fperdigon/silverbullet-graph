@@ -179,6 +179,15 @@ saved to `localStorage`, so they are per-browser.
 
 Plus **Unpin all nodes** and **Reset to defaults**.
 
+The embedded preview has a **controls** button too, with a smaller version of
+this panel: link rigidity, gravity, node size, label cutoff, and the three
+toggles. Every value there is the same `localStorage` key as the full view, so
+a change made in one shows up in the other. Repulsion, link distance and node
+spacing are left out of the embed on purpose — the preview forces those three
+to a denser, iframe-sized layout so a whole space doesn't sprawl off a
+400px-tall thumbnail, and exposing sliders that get silently overridden on the
+next page load would just be confusing. Open the full graph to tune those.
+
 Drag a node to move it. By default it rejoins the layout on release; with
 pinning on it stays put, marked with a thin ring. Double-click a node to unpin
 it, or double-click empty space to unpin everything. Dragging works while the

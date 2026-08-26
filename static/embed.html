@@ -11,8 +11,22 @@
   <div class="embed-stats" id="stats"></div>
   <div class="embed-bar">
     <button type="button" id="reset-view" title="Re-fit the graph to the frame">reset view</button>
+    <button type="button" id="toggle-panel" title="Layout controls">controls</button>
     <a href="./" target="_blank" rel="noopener">open full graph</a>
   </div>
+
+  <aside class="panel" id="panel" hidden>
+    <div class="panel-head">
+      <strong>Layout</strong>
+      <button id="panel-close" title="Close">&times;</button>
+    </div>
+    <div id="controls"></div>
+    <div class="panel-foot">
+      <button id="unpin">Unpin all nodes</button>
+      <button id="defaults">Reset to defaults</button>
+    </div>
+    <div class="panel-note">Settings are saved in this browser, shared with the full view.</div>
+  </aside>
 </div>
 
 <script src="static/vendor/d3.min.js"></script>
@@ -34,6 +48,126 @@
   document.getElementById("reset-view").addEventListener("click", function () {
     view.reset();
   });
+
+  /* ---- layout controls: label + feel, not spacing ----
+     Repulsion, link distance and node spacing are deliberately left out here.
+     The embed forces those three to denser, iframe-sized values (see
+     applyCompactDensity in graph.js) so the preview doesn't sprawl off-frame;
+     since every slider here shares localStorage with the full view, exposing
+     them would let a drag inside this small preview silently overwrite the
+     full view's spacing next time it loads. Open the full graph for those. */
+  var SLIDERS = [
+    { key: "linkStrength", label: "Link rigidity", min: 0,   max: 1,   step: 0.05,
+      hint: "How strictly edges hold their length. Low is loose and organic." },
+    { key: "gravity",      label: "Gravity",       min: 0,   max: 0.3, step: 0.01,
+      hint: "Pull toward the centre. Raise it to gather orphan pages in." },
+    { key: "nodeScale",    label: "Node size",     min: 0.4, max: 3,   step: 0.1,
+      hint: "Multiplier on node radius." },
+    { key: "labelDegree",  label: "Label cutoff",  min: 0,   max: 25,  step: 1,
+      hint: "Hide labels for pages with fewer links than this. 0 shows everything." }
+  ];
+
+  var TOGGLES = [
+    { key: "showLabels",     label: "Show labels" },
+    { key: "showUnresolved", label: "Show unresolved (broken links)" },
+    { key: "pinOnDrag",      label: "Pin nodes where I drop them",
+      hint: "Off: a dragged node springs back into the layout, like Obsidian. " +
+            "On: it stays put. Double-click a node to unpin it, or double-click " +
+            "empty space to unpin everything." }
+  ];
+
+  var controlsEl = document.getElementById("controls");
+
+  function buildControls() {
+    controlsEl.innerHTML = "";
+    var P = view.params();
+
+    SLIDERS.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "ctl";
+
+      var lab = document.createElement("label");
+      lab.textContent = c.label;
+      var val = document.createElement("span");
+      val.className = "val";
+      val.textContent = P[c.key];
+      lab.appendChild(val);
+
+      var input = document.createElement("input");
+      input.type = "range";
+      input.min = c.min; input.max = c.max; input.step = c.step;
+      input.value = P[c.key];
+      input.title = c.hint;
+      input.addEventListener("input", function () {
+        var v = parseFloat(input.value);
+        val.textContent = v;
+        view.setParam(c.key, v);
+      });
+
+      var hint = document.createElement("div");
+      hint.className = "hint";
+      hint.textContent = c.hint;
+
+      row.appendChild(lab);
+      row.appendChild(input);
+      row.appendChild(hint);
+      controlsEl.appendChild(row);
+    });
+
+    TOGGLES.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "ctl ctl-check";
+      var lab = document.createElement("label");
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = !!P[c.key];
+      input.addEventListener("change", function () {
+        view.setParam(c.key, input.checked);
+      });
+      lab.appendChild(input);
+      lab.appendChild(document.createTextNode(" " + c.label));
+      row.appendChild(lab);
+      if (c.hint) {
+        var h = document.createElement("div");
+        h.className = "hint";
+        h.textContent = c.hint;
+        row.appendChild(h);
+      }
+      controlsEl.appendChild(row);
+    });
+
+    var frow = document.createElement("div");
+    frow.className = "ctl ctl-check";
+    var flab = document.createElement("label");
+    var fin = document.createElement("input");
+    fin.type = "checkbox";
+    fin.addEventListener("change", function () { view.freeze(fin.checked); });
+    flab.appendChild(fin);
+    flab.appendChild(document.createTextNode(" Freeze layout"));
+    frow.appendChild(flab);
+    var fhint = document.createElement("div");
+    fhint.className = "hint";
+    fhint.textContent = "Stop the simulation. Nodes stay where they are and stop drifting.";
+    frow.appendChild(fhint);
+    controlsEl.appendChild(frow);
+  }
+
+  var panel = document.getElementById("panel");
+  document.getElementById("toggle-panel").addEventListener("click", function () {
+    panel.hidden = !panel.hidden;
+  });
+  document.getElementById("panel-close").addEventListener("click", function () {
+    panel.hidden = true;
+  });
+  document.getElementById("unpin").addEventListener("click", function () {
+    view.unpinAll();
+  });
+  document.getElementById("defaults").addEventListener("click", function () {
+    view.resetParams();
+    buildControls();
+  });
+
+  buildControls();
 })();
 </script>
 </body>

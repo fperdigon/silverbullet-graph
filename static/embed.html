@@ -9,7 +9,10 @@
 <body class="embed">
 <div id="graph">
   <div class="embed-stats" id="stats"></div>
-  <div class="embed-bar"><a href="./" target="_blank" rel="noopener">open full graph</a></div>
+  <div class="embed-bar">
+    <button type="button" id="reset-view" title="Re-fit the graph to the frame">reset view</button>
+    <a href="./" target="_blank" rel="noopener">open full graph</a>
+  </div>
 </div>
 
 <script src="static/vendor/d3.min.js"></script>
@@ -27,6 +30,9 @@
   view.load().then(function () { view.live(); }).catch(function (e) {
     statsEl.textContent = "graph unavailable";
     console.warn(e);
+  });
+  document.getElementById("reset-view").addEventListener("click", function () {
+    view.reset();
   });
 })();
 </script>

@@ -88,7 +88,6 @@
       P.linkDistance = 26;
       P.charge = -55;
       P.collide = 3;
-      P.showLabels = false;
       P.showUnresolved = false;
     }
 
@@ -264,7 +263,11 @@
       }
 
       // --- labels: only what is legible and worth reading ---
-      if (P.showLabels && t.k > 0.35) {
+      // The compact preview fits a whole space into a few hundred pixels, so
+      // its resting zoom level is much lower than the full view's; gating on
+      // the same 0.35 meant labels never appeared without zooming in first.
+      var labelZoomMin = compact ? 0.1 : 0.35;
+      if (P.showLabels && t.k > labelZoomMin) {
         ctx.globalAlpha = 1;
         var fs = Math.max(8.5 / t.k, 3);
         ctx.font = fs + "px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif";

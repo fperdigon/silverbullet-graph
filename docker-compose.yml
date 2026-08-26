@@ -13,17 +13,20 @@ services:
     container_name: sb-graph
     restart: unless-stopped
     environment:
+      # Everything below is overridable from .env, so this file stays generic
+      # and you never have to edit a tracked file to deploy.
+      #
       # Internal address: talk to SilverBullet over the shared docker network,
       # so this never leaves the host and needs no TLS.
-      SILVERBULLET_URL: "http://silverbullet:3000"
+      SILVERBULLET_URL: "${SILVERBULLET_URL:-http://silverbullet:3000}"
       # Public address, used only to build clickable links in the UI.
-      SILVERBULLET_PUBLIC_URL: "https://silverbullet.example.com"
+      SILVERBULLET_PUBLIC_URL: "${SILVERBULLET_PUBLIC_URL:-http://localhost:3000}"
       SILVERBULLET_TOKEN: "${SB_AUTH_TOKEN}"
-      RECONCILE_INTERVAL: "300"
+      RECONCILE_INTERVAL: "${RECONCILE_INTERVAL:-300}"
       # SilverBullet's own std library is machinery, not content; `sb ls` hides
       # it too. Comma-separated prefixes.
-      EXCLUDE_PREFIXES: "Library/"
-      LOG_LEVEL: "INFO"
+      EXCLUDE_PREFIXES: "${EXCLUDE_PREFIXES:-Library/}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
     volumes:
       - sb_graph_data:/data
     networks:

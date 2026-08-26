@@ -48,11 +48,14 @@ Requires an existing SilverBullet container and a docker network you can join.
 git clone https://github.com/fperdigon/silverbullet-graph.git
 cd silverbullet-graph
 cp .env.example .env      # then put your SilverBullet token in it
-$EDITOR docker-compose.yml # set SILVERBULLET_PUBLIC_URL, check the network name
+$EDITOR .env               # set SILVERBULLET_PUBLIC_URL and the token
 docker compose up -d --build
 ```
 
-`SB_AUTH_TOKEN` must match the token SilverBullet itself was started with.
+Everything is configured through `.env`; the compose file itself needs no edits.
+`SB_AUTH_TOKEN` must match the token SilverBullet itself was started with, and
+`SILVERBULLET_PUBLIC_URL` must be your real SilverBullet URL or node clicks go
+nowhere useful.
 
 Then point a reverse proxy at the container on port 8000. If you use Caddy:
 

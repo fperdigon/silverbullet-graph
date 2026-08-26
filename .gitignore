@@ -8,3 +8,6 @@ __pycache__/
 # Runtime state (lives in the docker volume in normal use)
 cache.json
 data/
+
+# Local compose overrides
+docker-compose.override.yml

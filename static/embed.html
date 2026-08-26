@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Space Graph preview</title>
+<link rel="stylesheet" href="static/app.css?v={{V}}">
+</head>
+<body class="embed">
+<div id="graph">
+  <div class="embed-stats" id="stats"></div>
+  <div class="embed-bar"><a href="./" target="_blank" rel="noopener">open full graph</a></div>
+</div>
+
+<script src="static/vendor/d3.min.js"></script>
+<script src="static/graph.js?v={{V}}"></script>
+<script>
+(function () {
+  var statsEl = document.getElementById("stats");
+  var view = GraphView({
+    container: "#graph",
+    compact: true,
+    onStats: function (s) {
+      statsEl.textContent = s.pages + " pages, " + s.edges + " links";
+    }
+  });
+  view.load().then(function () { view.live(); }).catch(function (e) {
+    statsEl.textContent = "graph unavailable";
+    console.warn(e);
+  });
+})();
+</script>
+</body>
+</html>

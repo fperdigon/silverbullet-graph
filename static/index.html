@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Space Graph</title>
+<link rel="stylesheet" href="static/app.css?v={{V}}">
+</head>
+<body>
+<div class="wrap">
+  <div class="toolbar">
+    <h1>Space Graph</h1>
+    <input type="search" id="q" placeholder="Filter pages..." autocomplete="off">
+    <button id="reset">Fit view</button>
+    <button id="refresh">Refresh</button>
+    <button id="toggle-panel" title="Layout controls">Controls</button>
+    <span class="spacer"></span>
+    <span class="stats" id="stats">loading...</span>
+  </div>
+
+  <div id="stage">
+    <div id="graph"></div>
+
+    <aside class="panel" id="panel" hidden>
+      <div class="panel-head">
+        <strong>Layout</strong>
+        <button id="panel-close" title="Close">&times;</button>
+      </div>
+      <div id="controls"></div>
+      <div class="panel-foot">
+        <button id="unpin">Unpin all nodes</button>
+        <button id="defaults">Reset to defaults</button>
+      </div>
+      <div class="panel-note">Settings are saved in this browser.</div>
+    </aside>
+
+    <div class="legend" id="legend"></div>
+    <div class="perf" id="perf"></div>
+  </div>
+</div>
+
+<script src="static/vendor/d3.min.js"></script>
+<script src="static/graph.js?v={{V}}"></script>
+<script>
+(function () {
+  var statsEl = document.getElementById("stats");
+  var legendEl = document.getElementById("legend");
+  var perfEl = document.getElementById("perf");
+
+  var view = GraphView({
+    container: "#graph",
+    compact: false,
+    onStats: function (s) {
+      statsEl.textContent =
+        s.pages + " pages  |  " + s.edges + " links  |  " + s.unresolved + " unresolved";
+      drawLegend();
+    }
+  });
+
+  /* ---- layout controls ---- */
+  var SLIDERS = [
+    { key: "charge",       label: "Repulsion",     min: -800, max: -20, step: 10,
+      hint: "How hard nodes push each other apart. More negative spreads the graph out." },
+    { key: "linkDistance", label: "Link distance", min: 10,  max: 220, step: 5,
+      hint: "Preferred length of each edge." },
+    { key: "linkStrength", label: "Link rigidity", min: 0,   max: 1,   step: 0.05,
+      hint: "How strictly edges hold that length. Low is loose and organic." },
+    { key: "collide",      label: "Node spacing",  min: 0,   max: 40,  step: 1,
+      hint: "Minimum clear space around each node, on top of its radius." },
+    { key: "gravity",      label: "Gravity",       min: 0,   max: 0.3, step: 0.01,
+      hint: "Pull toward the centre. Raise it to gather orphan pages in." },
+    { key: "nodeScale",    label: "Node size",     min: 0.4, max: 3,   step: 0.1,
+      hint: "Multiplier on node radius." },
+    { key: "labelDegree",  label: "Label cutoff",  min: 0,   max: 25,  step: 1,
+      hint: "Hide labels for pages with fewer links than this. 0 shows everything." }
+  ];
+
+  var TOGGLES = [
+    { key: "showLabels",     label: "Show labels" },
+    { key: "showUnresolved", label: "Show unresolved (broken links)" },
+    { key: "pinOnDrag",      label: "Pin nodes where I drop them",
+      hint: "Off: a dragged node springs back into the layout, like Obsidian. " +
+            "On: it stays put. Double-click a node to unpin it, or double-click " +
+            "empty space to unpin everything." }
+  ];
+
+  var controlsEl = document.getElementById("controls");
+  var inputs = {};
+
+  function buildControls() {
+    controlsEl.innerHTML = "";
+    var P = view.params();
+
+    SLIDERS.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "ctl";
+
+      var lab = document.createElement("label");
+      lab.textContent = c.label;
+      var val = document.createElement("span");
+      val.className = "val";
+      val.textContent = P[c.key];
+      lab.appendChild(val);
+
+      var input = document.createElement("input");
+      input.type = "range";
+      input.min = c.min; input.max = c.max; input.step = c.step;
+      input.value = P[c.key];
+      input.title = c.hint;
+      input.addEventListener("input", function () {
+        var v = parseFloat(input.value);
+        val.textContent = v;
+        view.setParam(c.key, v);
+      });
+
+      var hint = document.createElement("div");
+      hint.className = "hint";
+      hint.textContent = c.hint;
+
+      row.appendChild(lab);
+      row.appendChild(input);
+      row.appendChild(hint);
+      controlsEl.appendChild(row);
+      inputs[c.key] = { input: input, val: val };
+    });
+
+    TOGGLES.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "ctl ctl-check";
+      var lab = document.createElement("label");
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = !!P[c.key];
+      input.addEventListener("change", function () {
+        view.setParam(c.key, input.checked);
+      });
+      lab.appendChild(input);
+      lab.appendChild(document.createTextNode(" " + c.label));
+      row.appendChild(lab);
+      if (c.hint) {
+        var h = document.createElement("div");
+        h.className = "hint";
+        h.textContent = c.hint;
+        row.appendChild(h);
+      }
+      controlsEl.appendChild(row);
+      inputs[c.key] = { input: input };
+    });
+
+    // Freeze is view state, not a saved layout parameter.
+    var frow = document.createElement("div");
+    frow.className = "ctl ctl-check";
+    var flab = document.createElement("label");
+    var fin = document.createElement("input");
+    fin.type = "checkbox";
+    fin.addEventListener("change", function () { view.freeze(fin.checked); });
+    flab.appendChild(fin);
+    flab.appendChild(document.createTextNode(" Freeze layout"));
+    frow.appendChild(flab);
+    var fhint = document.createElement("div");
+    fhint.className = "hint";
+    fhint.textContent = "Stop the simulation. Nodes stay where they are and stop drifting.";
+    frow.appendChild(fhint);
+    controlsEl.appendChild(frow);
+  }
+
+  function drawLegend() {
+    legendEl.innerHTML = "";
+    view.folders().forEach(function (f) {
+      var row = document.createElement("div");
+      row.className = "row";
+      var dot = document.createElement("span");
+      dot.className = "dot";
+      dot.style.background = f.col;
+      var txt = document.createElement("span");
+      txt.textContent = f.name;
+      row.appendChild(dot);
+      row.appendChild(txt);
+      legendEl.appendChild(row);
+    });
+  }
+
+  /* ---- wiring ---- */
+  var panel = document.getElementById("panel");
+  document.getElementById("toggle-panel").addEventListener("click", function () {
+    panel.hidden = !panel.hidden;
+  });
+  document.getElementById("panel-close").addEventListener("click", function () {
+    panel.hidden = true;
+  });
+  document.getElementById("unpin").addEventListener("click", function () {
+    view.unpinAll();
+  });
+  document.getElementById("defaults").addEventListener("click", function () {
+    view.resetParams();
+    buildControls();
+  });
+  document.getElementById("q").addEventListener("input", function (e) {
+    view.setQuery(e.target.value);
+  });
+  document.getElementById("reset").addEventListener("click", function () {
+    view.reset();
+  });
+  document.getElementById("refresh").addEventListener("click", function () {
+    fetch("api/rebuild", { method: "POST" })
+      .then(function () { return view.load(); })
+      .catch(function (e) { console.warn(e); });
+  });
+
+  /* ---- rolling frame-time readout ---- */
+  (function perf() {
+    var last = performance.now(), acc = [], shown = 0;
+    function tick(now) {
+      var dt = now - last; last = now;
+      if (dt < 500) acc.push(dt);
+      if (acc.length >= 30) {
+        acc.sort(function (a, b) { return a - b; });
+        var med = acc[Math.floor(acc.length / 2)];
+        acc = [];
+        if (now - shown > 900) {
+          shown = now;
+          perfEl.textContent = med.toFixed(1) + " ms/frame";
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  })();
+
+  buildControls();
+  view.load().then(function () { view.live(); }).catch(function (e) {
+    statsEl.textContent = "error: " + e.message;
+  });
+})();
+</script>
+</body>
+</html>

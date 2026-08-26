@@ -1,0 +1,237 @@
+:root {
+  --bg: #ffffff;
+  --panel: #f4f5f7;
+  --border: #d9dce1;
+  --fg: #23262b;
+  --muted: #6b7280;
+  --link: #b9bfc9;
+  --link-hot: #4b5563;
+  --accent: #3b6fd4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1e22;
+    --panel: #24272c;
+    --border: #34383f;
+    --fg: #e4e6ea;
+    --muted: #99a0ab;
+    --link: #3b4048;
+    --link-hot: #8d97a5;
+    --accent: #7c9fe8;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+/* ---------- layout ---------- */
+.wrap { display: flex; flex-direction: column; height: 100%; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+.toolbar h1 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 6px 0 0;
+  letter-spacing: .02em;
+}
+
+.toolbar input[type="search"] {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 5px;
+  padding: 4px 8px;
+  min-width: 190px;
+  font: inherit;
+  outline: none;
+}
+.toolbar input[type="search"]:focus { border-color: var(--accent); }
+
+button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 5px;
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); color: var(--accent); }
+
+.spacer { flex: 1 1 auto; }
+.stats { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+#stage { flex: 1 1 auto; position: relative; min-height: 0; }
+#graph { position: absolute; inset: 0; }
+.graph-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  /* Belt and braces: d3-zoom also sets this inline. Kept so the canvas still
+     behaves if that ever changes. Without it the browser claims every touch
+     gesture for page scroll and the canvas never sees touchstart. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.graph-canvas:active { cursor: grabbing; }
+
+/* ---------- controls panel ---------- */
+.panel {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 260px;
+  max-height: calc(100% - 20px);
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .18);
+  z-index: 10;
+  padding: 10px 12px 12px;
+}
+.panel[hidden] { display: none; }
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.panel-head strong { font-size: 12px; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
+.panel-head button { border: none; background: none; font-size: 18px; line-height: 1; padding: 0 4px; color: var(--muted); }
+
+.ctl { margin-bottom: 12px; }
+.ctl label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+.ctl .val { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 11px; }
+.ctl input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+.ctl .hint { color: var(--muted); font-size: 10.5px; line-height: 1.35; margin-top: 3px; }
+
+.ctl-check label { justify-content: flex-start; gap: 6px; cursor: pointer; }
+.ctl-check input { accent-color: var(--accent); }
+
+.panel-foot { margin-top: 4px; }
+.panel-foot button { width: 100%; }
+.panel-note { color: var(--muted); font-size: 10.5px; margin-top: 8px; text-align: center; }
+
+/* ---------- legend ---------- */
+.legend {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 45%;
+  overflow: auto;
+  pointer-events: none;
+}
+.legend .row { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.legend .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+
+/* ---------- perf readout ---------- */
+.perf {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  opacity: .65;
+}
+
+/* ---------- embedded preview ---------- */
+body.embed { background: transparent; }
+body.embed #graph { position: absolute; inset: 0; }
+/* NOTE: the preview's touch-action is set from JS, not here. d3-zoom writes
+   `touch-action: none` inline on the canvas, and an inline style beats any
+   stylesheet rule, so this had to move into graph.js. See the `if (compact)`
+   line after the zoom binding. */
+
+.embed-bar {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.embed-bar a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+.embed-bar a:hover { color: var(--accent); border-color: var(--accent); }
+
+.embed-stats {
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  z-index: 5;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.panel-foot { display: flex; gap: 6px; }
+.panel-foot button { flex: 1 1 auto; }
+
+
+/* ---------- narrow screens / phones ---------- */
+@media (max-width: 560px) {
+  .toolbar { gap: 6px; padding: 6px 8px; }
+  .toolbar h1 { width: 100%; margin-bottom: 2px; }
+  .toolbar input[type="search"] { min-width: 0; flex: 1 1 120px; }
+  .stats { width: 100%; font-size: 11px; }
+
+  .panel {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    top: auto;
+    bottom: 8px;
+    max-height: 62%;
+  }
+  /* The legend would sit under the panel; move it out of the way. */
+  .legend { max-height: 30%; font-size: 10px; }
+  .perf { display: none; }
+}

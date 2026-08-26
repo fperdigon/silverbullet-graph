@@ -1,0 +1,41 @@
+# sb-graph: link-graph companion for SilverBullet.
+#
+# Reads the space through SilverBullet's own /.fs/ HTTP API (never off disk),
+# keeps the graph in memory, and updates incrementally:
+#   * SilverBullet POSTs /api/notify on page save  -> refetch that one page
+#   * a periodic reconcile lists /.fs/ once        -> refetch only changed files
+#
+# Put it behind whatever reverse proxy already fronts SilverBullet.
+services:
+  sb-graph:
+    build: .
+    image: sb-graph:local
+    container_name: sb-graph
+    restart: unless-stopped
+    environment:
+      # Internal address: talk to SilverBullet over the shared docker network,
+      # so this never leaves the host and needs no TLS.
+      SILVERBULLET_URL: "http://silverbullet:3000"
+      # Public address, used only to build clickable links in the UI.
+      SILVERBULLET_PUBLIC_URL: "https://silverbullet.example.com"
+      SILVERBULLET_TOKEN: "${SB_AUTH_TOKEN}"
+      RECONCILE_INTERVAL: "300"
+      # SilverBullet's own std library is machinery, not content; `sb ls` hides
+      # it too. Comma-separated prefixes.
+      EXCLUDE_PREFIXES: "Library/"
+      LOG_LEVEL: "INFO"
+    volumes:
+      - sb_graph_data:/data
+    networks:
+      - silverbullet
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+volumes:
+  sb_graph_data:
+
+networks:
+  silverbullet:
+    external: true
+    name: silverbullet_default

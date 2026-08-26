@@ -1,0 +1,10 @@
+# Local secrets: holds the SilverBullet API token
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Runtime state (lives in the docker volume in normal use)
+cache.json
+data/

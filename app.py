@@ -67,7 +67,7 @@ def asset_version() -> str:
     reuse those heuristically without revalidating.
     """
     h = hashlib.md5()
-    for name in ("graph.js", "app.css"):
+    for name in ("graph.js", "graph3d.js", "app.css"):
         f = STATIC_DIR / name
         if f.exists():
             h.update(f.read_bytes())

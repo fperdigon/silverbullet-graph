@@ -14,6 +14,7 @@
     <button id="reset">Fit view</button>
     <button id="refresh">Refresh</button>
     <button id="toggle-panel" title="Layout controls">Controls</button>
+    <button id="toggle-3d" title="Switch between the 2D canvas and a 3D WebGL view">3D</button>
     <button id="theme" title="Theme: follow system, light, or dark">Theme: auto</button>
     <span class="spacer"></span>
     <span class="stats" id="stats">loading...</span>
@@ -21,6 +22,7 @@
 
   <div id="stage">
     <div id="graph"></div>
+    <div id="graph3d" hidden></div>
 
     <aside class="panel" id="panel" hidden>
       <div class="panel-head">
@@ -42,6 +44,8 @@
 
 <script src="static/vendor/d3.min.js"></script>
 <script src="static/graph.js?v={{V}}"></script>
+<script src="static/graph3d.js?v={{V}}"></script>
+<script>window.SB_ASSET_V = "{{V}}";</script>
 <script>
 (function () {
   var statsEl = document.getElementById("stats");
@@ -51,10 +55,12 @@
   var view = GraphView({
     container: "#graph",
     compact: false,
-    onStats: function (s) {
+    onStats: function (s, payload) {
       statsEl.textContent =
         s.pages + " pages  |  " + s.edges + " links  |  " + s.unresolved + " unresolved";
       drawLegend();
+      lastPayload = payload;
+      push3d(false);
     }
   });
 
@@ -167,18 +173,46 @@
 
   function drawLegend() {
     legendEl.innerHTML = "";
-    view.folders().forEach(function (f) {
+    var folders = view.folders();
+    var anyHidden = false;
+
+    folders.forEach(function (f) {
+      if (f.hidden) anyHidden = true;
       var row = document.createElement("div");
-      row.className = "row";
+      row.className = "row" + (f.hidden ? " off" : "");
+      row.tabIndex = 0;
+      row.setAttribute("role", "switch");
+      row.setAttribute("aria-checked", f.hidden ? "false" : "true");
+      row.title = (f.hidden ? "Show " : "Hide ") + f.name;
+
       var dot = document.createElement("span");
       dot.className = "dot";
       dot.style.background = f.col;
+      // `off` styling paints the ring from currentColor, so the swatch keeps
+      // its own hue rather than turning grey.
+      dot.style.color = f.col;
+
       var txt = document.createElement("span");
+      txt.className = "name";
       txt.textContent = f.name;
+
       row.appendChild(dot);
       row.appendChild(txt);
+
+      function toggle() { view.toggleFolder(f.name); drawLegend(); push3d(true); }
+      row.addEventListener("click", toggle);
+      row.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+      });
       legendEl.appendChild(row);
     });
+
+    if (anyHidden) {
+      var hint = document.createElement("div");
+      hint.className = "hint";
+      hint.textContent = "click to show again";
+      legendEl.appendChild(hint);
+    }
   }
 
   /* ---- wiring ---- */
@@ -208,6 +242,98 @@
       .catch(function (e) { console.warn(e); });
   });
 
+  /* ---- 3D view ----
+       Lives beside the 2D view rather than replacing it: the canvas renderer
+       stays the default and the WebGL bundle is only fetched the first time
+       someone presses this. Layout controls, search and the legend belong to
+       the 2D simulation and are hidden while 3D is up rather than left visible
+       and inert. */
+  var g3d = null, in3d = false, lastPayload = null;
+  var btn3d = document.getElementById("toggle-3d");
+  var graph2dEl = document.getElementById("graph");
+  var graph3dEl = document.getElementById("graph3d");
+
+  function set3dChrome(on) {
+    graph2dEl.classList.toggle("offstage", on);
+    graph3dEl.hidden = !on;
+    // The legend stays up in 3D: it is the colour key for what you are looking
+    // at, and its folder switches drive both views.
+    perfEl.hidden = on;
+    if (on) panel.hidden = true;
+    document.getElementById("toggle-panel").disabled = on;
+    document.getElementById("q").disabled = on;
+    document.getElementById("reset").disabled = on;
+    btn3d.classList.toggle("active", on);
+    btn3d.textContent = on ? "2D" : "3D";
+  }
+
+  /* The 3D view renders the same filtered set as 2D. The folder switches and
+     the unresolved toggle live in the 2D view's state, so read them back rather
+     than keeping a second copy that could drift. */
+  function dataFor3d() {
+    if (!lastPayload) return { nodes: [], links: [] };
+    var hidden = {};
+    view.folders().forEach(function (f) { if (f.hidden) hidden[f.name] = true; });
+    var showGhosts = view.params().showUnresolved;
+    var nodes = lastPayload.nodes.filter(function (n) {
+      return (showGhosts || n.exists) && !hidden[n.folder];
+    });
+    var keep = {};
+    nodes.forEach(function (n) { keep[n.id] = true; });
+    var links = lastPayload.links.filter(function (l) {
+      return keep[l.source] && keep[l.target];
+    });
+    return { nodes: nodes, links: links };
+  }
+
+  function push3d(refit) {
+    if (!g3d || !g3d.isReady()) return;
+    if (refit) g3d.refit();
+    g3d.setData(dataFor3d());
+  }
+
+  function enter3d() {
+    in3d = true;
+    set3dChrome(true);
+    btn3d.disabled = true;
+    if (!g3d) {
+      g3d = Graph3D({
+        container: "#graph3d",
+        sbUrl: (lastPayload && lastPayload.sbUrl) || "",
+        // Reuse the 2D view's own colour scale so a folder is the same colour
+        // in both views and the legend still describes what you are looking at.
+        folderColour: function (name) {
+          var f = view.folders();
+          for (var i = 0; i < f.length; i++) if (f[i].name === name) return f[i].col;
+          return "#7c9fe8";
+        }
+      });
+    }
+    var data = dataFor3d();
+    (g3d.isReady() ? Promise.resolve(g3d.setData(data)) : g3d.start(data))
+      .then(function () { btn3d.disabled = false; })
+      .catch(function (e) {
+        console.warn(e);
+        statsEl.textContent = "3D unavailable: " + e.message;
+        btn3d.disabled = false;
+        leave3d();
+      });
+  }
+
+  function leave3d() {
+    in3d = false;
+    set3dChrome(false);
+    // Keep the instance alive so switching back is instant; only the WebGL
+    // context would be costly to rebuild, and it is reused.
+    view.reset();
+  }
+
+  btn3d.addEventListener("click", function () {
+    if (in3d) leave3d(); else enter3d();
+  });
+
+  window.addEventListener("resize", function () { if (in3d && g3d) g3d.resize(); });
+
   /* ---- theme toggle: auto -> light -> dark ---- */
   var THEMES = ["auto", "light", "dark"];
   var themeBtn = document.getElementById("theme");
@@ -216,6 +342,7 @@
     var next = THEMES[(THEMES.indexOf(view.theme()) + 1) % THEMES.length];
     view.setTheme(next);
     paintThemeBtn();
+    if (g3d && g3d.isReady()) g3d.repaintTheme();
   });
   paintThemeBtn();
 

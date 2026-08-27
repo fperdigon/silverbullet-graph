@@ -108,6 +108,7 @@
       hover: null,
       query: "",
       queryMiss: new Set(),
+      hiddenFolders: new Set(),
       frozen: false,
       userMoved: false,
       dragMoved: false,
@@ -333,10 +334,26 @@
       state.neighbours = m;
     }
 
+    /* Rest length of one edge.
+       A single fixed distance is what makes a force layout look gridded: every
+       node ends up the same span from every neighbour. Obsidian looks organic
+       because a hub holds its neighbours further out than a leaf pair does, so
+       scale the rest length by the better-connected endpoint. The sqrt keeps it
+       sane -- a 200-link hub should be roomier than a 4-link one, not fifty
+       times roomier -- and the clamp stops an edge collapsing to nothing or
+       shooting off frame. P.linkDistance still scales the whole thing. */
+    function linkDistanceFor(l) {
+      var hub = Math.max(
+        (l.source && l.source.degree) || 0,
+        (l.target && l.target.degree) || 0
+      );
+      return P.linkDistance * (0.75 + Math.min(Math.sqrt(hub) / 4, 1.75));
+    }
+
     function applyForces(reheat) {
       if (!state.sim) return;
       var s = size();
-      state.sim.force("link").distance(P.linkDistance).strength(P.linkStrength);
+      state.sim.force("link").distance(linkDistanceFor).strength(P.linkStrength);
       state.sim.force("charge").strength(P.charge);
       state.sim.force("collide").radius(function (d) { return radius(d) + P.collide; });
       state.sim.force("x").x(s.w / 2).strength(P.gravity);
@@ -348,7 +365,12 @@
       resizeCanvas();
 
       var visible = state.raw.nodes.filter(function (n) {
-        return P.showUnresolved || n.exists;
+        if (!P.showUnresolved && !n.exists) return false;
+        // Folders switched off in the legend leave the layout entirely, so the
+        // rest re-settles into the space they freed. Kept in memory rather than
+        // saved, matching the search box: both are a way to look at the graph
+        // right now, not a setting.
+        return !state.hiddenFolders.has(n.folder);
       });
       var keep = new Set(visible.map(function (n) { return n.id; }));
 
@@ -648,9 +670,27 @@
       },
       folders: function () {
         var m = new Map();
+        // Counted over raw nodes, not visible ones: a folder that is currently
+        // switched off must still appear in the legend, or there is no way to
+        // switch it back on.
         state.raw.nodes.forEach(function (n) { m.set(n.folder, colour(n.folder)); });
-        return Array.from(m, function (e) { return { name: e[0], col: e[1] }; })
-          .sort(function (a, b) { return a.name.localeCompare(b.name); });
+        return Array.from(m, function (e) {
+          return { name: e[0], col: e[1], hidden: state.hiddenFolders.has(e[0]) };
+        }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+      },
+      toggleFolder: function (name) {
+        if (state.hiddenFolders.has(name)) state.hiddenFolders.delete(name);
+        else state.hiddenFolders.add(name);
+        // Re-fit afterwards unless the user has framed the view themselves;
+        // removing a whole folder changes the extent enough that the old frame
+        // is usually wrong.
+        build();
+        return state.hiddenFolders.has(name);
+      },
+      showAllFolders: function () {
+        if (!state.hiddenFolders.size) return;
+        state.hiddenFolders.clear();
+        build();
       },
       reset: function () { state.userMoved = false; fit(400); },
       theme: currentTheme,

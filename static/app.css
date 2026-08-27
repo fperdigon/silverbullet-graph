@@ -97,6 +97,15 @@ button:hover { border-color: var(--accent); color: var(--accent); }
 
 #stage { flex: 1 1 auto; position: relative; min-height: 0; }
 #graph { position: absolute; inset: 0; }
+/* The 3D view sits in the same box as the 2D canvas; exactly one is ever
+   visible. It paints its own background through the WebGL renderer. */
+#graph3d { position: absolute; inset: 0; overflow: hidden; }
+#graph3d[hidden] { display: none; }
+/* The 2D canvas is hidden with `visibility`, never `display:none`. Its resize
+   handler measures the container, and a display:none box measures 0x0, which
+   collapses the whole simulation into the 50px floor that size() clamps to. */
+#graph.offstage { visibility: hidden; pointer-events: none; }
+button.active { border-color: var(--accent); color: var(--accent); }
 .graph-canvas {
   display: block;
   width: 100%;
@@ -171,10 +180,31 @@ button:hover { border-color: var(--accent); color: var(--accent); }
   gap: 3px;
   max-height: 45%;
   overflow: auto;
-  pointer-events: none;
 }
-.legend .row { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+/* Rows are buttons: clicking one drops that folder out of the layout. The
+   legend used to be pointer-events:none, so anything clickable inside it needs
+   the events handed back explicitly. */
+.legend .row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+  padding: 1px 3px;
+  margin: -1px -3px;
+  border-radius: 4px;
+}
+.legend .row:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
+.legend .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+/* Switched off: hollow swatch and struck-through name, so the state reads at a
+   glance rather than relying on a subtle opacity difference. */
+.legend .row.off { opacity: .55; }
+.legend .row.off .name { text-decoration: line-through; }
+.legend .row.off .dot { background: transparent !important; box-shadow: inset 0 0 0 1.5px currentColor; }
 .legend .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.legend .hint { color: var(--muted); font-size: 10px; opacity: .8; margin-top: 3px; }
 
 /* ---------- perf readout ---------- */
 .perf {

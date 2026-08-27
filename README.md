@@ -21,6 +21,10 @@ Tested against SilverBullet **2.9.0**.
 ## What you get
 
 - **Full view** with search, layout controls and a folder legend.
+- **3D view.** A WebGL mode you can orbit, zoom and drag nodes in. Click a node
+  to open the page, same as in 2D.
+- **Clickable legend.** Click a folder's colour to drop it out of the layout;
+  the rest re-settles into the space it freed. Click again to bring it back.
 - **Embeddable preview** you can drop into your index page with a Space Lua widget.
 - **Live updates.** A page save pushes a webhook and only that page is reparsed.
 - **Broken-link detection.** Wikilinks pointing at pages that do not exist are
@@ -169,7 +173,7 @@ saved to `localStorage`, so they are per-browser.
 | Control | What it does |
 |---|---|
 | **Repulsion** | How hard nodes push each other apart. The main "spread it out" knob. |
-| **Link distance** | Preferred length of each edge. |
+| **Link distance** | Baseline edge length. The actual length scales up with how connected the busier endpoint is, so hubs hold their neighbours further out and leaf clusters stay tight. |
 | **Link rigidity** | How strictly edges hold that length. Low is loose and organic. |
 | **Node spacing** | Minimum clear space around each node, on top of its radius. |
 | **Gravity** | Pull toward the centre. Raise it to gather orphan pages in. |
@@ -198,6 +202,21 @@ layout is frozen too, so you can hand-arrange a static diagram.
 
 There is a small `ms/frame` readout in the bottom right, so you can see what a
 setting actually costs before committing to it.
+
+## 3D view
+
+The **3D** button in the toolbar switches the stage to a WebGL rendering of the
+same graph. Drag to orbit, scroll to zoom, drag a node to move and pin it, click
+a node to open the page. The folder legend keeps working, so you can switch
+groups off in 3D too.
+
+The 3D bundle is **1.3 MB and is fetched only the first time you press the
+button** — the 2D canvas stays the default and its load is unchanged. Switching
+back and forth afterwards is instant, and the WebGL context is released on
+teardown rather than leaked per visit.
+
+Search, the layout panel and *Fit view* belong to the 2D simulation and are
+disabled while 3D is up, rather than left visible and doing nothing.
 
 ## Theming
 
@@ -259,3 +278,8 @@ MIT, see [LICENSE](LICENSE).
 
 Bundles [D3](https://d3js.org) v7 (ISC, Mike Bostock) at
 `static/vendor/d3.min.js`; its copyright header is preserved in the file.
+
+Also bundles [3d-force-graph](https://github.com/vasturiano/3d-force-graph)
+v1.80.0 (MIT, Vasco Asturiano) at `static/vendor/3d-force-graph.min.js`. That
+build embeds [three.js](https://threejs.org) (MIT) and its force layout, which
+is why the file is 1.3 MB and why the graph needs no CDN at runtime.

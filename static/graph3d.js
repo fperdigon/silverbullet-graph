@@ -218,7 +218,7 @@
           // later re-settle does not yank the camera away from wherever the
           // viewer has just orbited to.
           .onEngineStop(function () {
-            if (fitPending && fg) { fitPending = false; fg.zoomToFit(600, 20); }
+            if (fitPending && fg) { fitPending = false; fit(600); }
           })
           .onNodeClick(function (n) {
             // Same behaviour as a click in 2D: open the page in SilverBullet.
@@ -320,9 +320,26 @@
        off in the legend. */
     function refit() { fitPending = true; }
 
+    /* Frame the connected core, not the bounding box of everything.
+       A space's isolated pages drift far out on gravity alone, and including
+       them in a 3D bounding-sphere fit pushed the camera so far back that the
+       graph you came to look at rendered as a knot of 2px dots in the middle of
+       an empty frame. Isolated nodes are still there, just outside the opening
+       frame; scroll out and they are where you would expect. */
+    function fit(ms) {
+      if (!fg) return;
+      var linked = 0, i;
+      for (i = 0; i < current.nodes.length; i++) {
+        if ((current.nodes[i].degree || 0) > 0) linked++;
+      }
+      // A space with no links at all, or almost none, has no core to frame.
+      if (linked < 3) { fg.zoomToFit(ms, 20); return; }
+      fg.zoomToFit(ms, 20, function (n) { return (n.degree || 0) > 0; });
+    }
+
     /* Re-frame right now, for the toolbar's Fit view button: waiting for a
        settle that may never come again would make the button look broken. */
-    function fitNow() { if (fg) fg.zoomToFit(600, 20); }
+    function fitNow() { fit(600); }
 
     function resize() {
       if (!fg || !el) return;

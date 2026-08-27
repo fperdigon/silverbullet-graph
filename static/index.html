@@ -38,6 +38,31 @@
       <div class="panel-note">Settings are saved in this browser.</div>
     </aside>
 
+    <!-- 3D camera pad. Hidden in 2D, where d3-zoom already gives drag-to-pan
+         and wheel-to-zoom on the whole canvas. -->
+    <div class="campad" id="campad" hidden>
+      <div class="campad-grid">
+        <span></span>
+        <button data-cam="up" title="Tilt up (Up arrow)">&#9650;</button>
+        <span></span>
+        <button data-cam="left" title="Turn left (Left arrow)">&#9664;</button>
+        <button data-cam="fit" title="Fit the graph in view (F)">&#9678;</button>
+        <button data-cam="right" title="Turn right (Right arrow)">&#9654;</button>
+        <span></span>
+        <button data-cam="down" title="Tilt down (Down arrow)">&#9660;</button>
+        <span></span>
+      </div>
+      <div class="campad-row">
+        <button data-cam="out" title="Zoom out (minus)">&minus;</button>
+        <button data-cam="pan" id="campad-pan" title="Switch the pad between turning and sliding the camera">Pan</button>
+        <button data-cam="in" title="Zoom in (plus)">+</button>
+      </div>
+      <div class="campad-keys">
+        <div>Drag rotate &middot; Right-drag pan &middot; Scroll zoom</div>
+        <div>Arrows orbit &middot; Shift+arrows pan &middot; +/&minus; zoom &middot; F fit</div>
+      </div>
+    </div>
+
     <div class="legend" id="legend"></div>
     <div class="perf" id="perf"></div>
   </div>
@@ -248,8 +273,10 @@
 
     var nav = document.createElement("div");
     nav.className = "hint";
-    nav.textContent = "Drag to orbit, right-drag to pan, scroll to zoom. " +
-      "Drag a node to move and pin it; click one to open the page.";
+    // Camera verbs live on the pad now, which is always visible in 3D; this
+    // panel is hidden by default, so repeating them here would only put the
+    // authoritative copy in the place nobody is looking.
+    nav.textContent = "Drag a node to move and pin it; click one to open the page.";
     controlsEl.appendChild(nav);
   }
 
@@ -380,9 +407,12 @@
   var btn3d = document.getElementById("toggle-3d");
   var graph2dEl = document.getElementById("graph");
   var graph3dEl = document.getElementById("graph3d");
+  var campad = document.getElementById("campad");
+  var panBtn = document.getElementById("campad-pan");
 
   function set3dChrome(on) {
     graph2dEl.classList.toggle("offstage", on);
+    campad.hidden = !on;
     graph3dEl.hidden = !on;
     // The legend stays up in 3D: it is the colour key for what you are looking
     // at, and its folder switches drive both views.
@@ -468,6 +498,60 @@
   });
 
   window.addEventListener("resize", function () { if (in3d && g3d) g3d.resize(); });
+
+  /* ---- 3D camera pad and keys ----
+     TrackballControls is mouse-only and, with the library's nav-info banner
+     turned off, entirely undiscoverable: nothing on screen says that
+     right-drag pans. So the bindings are printed under the pad, and the same
+     verbs are given buttons and arrow keys. */
+  var ORBIT_STEP = 12;    // degrees per press
+  var PAN_STEP = 0.12;    // fraction of the viewport per press
+  var panMode = false;
+
+  function cam(action, shift) {
+    if (!in3d || !g3d || !g3d.isReady()) return;
+    var sliding = panMode || shift;
+    switch (action) {
+      case "up":    sliding ? g3d.pan(0, PAN_STEP)  : g3d.orbit(0, ORBIT_STEP); break;
+      case "down":  sliding ? g3d.pan(0, -PAN_STEP) : g3d.orbit(0, -ORBIT_STEP); break;
+      case "left":  sliding ? g3d.pan(PAN_STEP, 0)  : g3d.orbit(ORBIT_STEP, 0); break;
+      case "right": sliding ? g3d.pan(-PAN_STEP, 0) : g3d.orbit(-ORBIT_STEP, 0); break;
+      case "in":    g3d.dolly(0.8); break;
+      case "out":   g3d.dolly(1.25); break;
+      case "fit":   g3d.fitNow(); break;
+    }
+  }
+
+  campad.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-cam]");
+    if (!btn) return;
+    var action = btn.getAttribute("data-cam");
+    if (action === "pan") {
+      panMode = !panMode;
+      panBtn.classList.toggle("active", panMode);
+      panBtn.textContent = panMode ? "Pan" : "Turn";
+      return;
+    }
+    cam(action, e.shiftKey);
+  });
+  panBtn.textContent = "Turn";
+
+  document.addEventListener("keydown", function (e) {
+    if (!in3d) return;
+    // Never steal a keystroke from the search box.
+    var t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var map = {
+      ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+      "+": "in", "=": "in", "-": "out", "_": "out",
+      f: "fit", F: "fit"
+    };
+    var action = map[e.key];
+    if (!action) return;
+    e.preventDefault();
+    cam(action, e.shiftKey);
+  });
 
   /* ---- theme toggle: auto -> light -> dark ---- */
   var THEMES = ["auto", "light", "dark"];

@@ -414,6 +414,119 @@
       }, centre, ms);
     }
 
+    /* ---- camera driving ------------------------------------------------
+       TrackballControls gives mouse verbs only: left-drag rotates, right-drag
+       pans, the wheel zooms. There is no keyboard and there are no programmatic
+       nudges, so buttons and keys have to move the camera directly. Each of
+       these edits camera.position and the controls' own target, then lets the
+       controls re-derive their internal state, which is the supported way to
+       move a trackball camera from outside. */
+    function ctrls() {
+      try { return fg && fg.controls ? fg.controls() : null; } catch (e) { return null; }
+    }
+
+    function target() {
+      var c = ctrls();
+      return (c && c.target) ? c.target : centre;
+    }
+
+    // Rodrigues rotation. No THREE namespace to borrow a quaternion from.
+    function rotAbout(v, ax, ang) {
+      var c = Math.cos(ang), s = Math.sin(ang);
+      var dot = v.x * ax.x + v.y * ax.y + v.z * ax.z;
+      return {
+        x: v.x * c + (ax.y * v.z - ax.z * v.y) * s + ax.x * dot * (1 - c),
+        y: v.y * c + (ax.z * v.x - ax.x * v.z) * s + ax.y * dot * (1 - c),
+        z: v.z * c + (ax.x * v.y - ax.y * v.x) * s + ax.z * dot * (1 - c)
+      };
+    }
+
+    function norm(v) {
+      var l = Math.hypot(v.x, v.y, v.z) || 1;
+      return { x: v.x / l, y: v.y / l, z: v.z / l };
+    }
+
+    function commit() {
+      var c = ctrls();
+      if (c && c.update) { try { c.update(); } catch (e) { /* mid-teardown */ } }
+    }
+
+    /* Orbit by whole degrees. Yaw turns about the camera's own up vector, so
+       the horizon stays level; pitch turns about the screen-right axis and is
+       clamped short of the poles, where the offset would line up with the up
+       vector and the yaw axis would become undefined. */
+    function orbit(yawDeg, pitchDeg) {
+      if (!fg) return;
+      var cam = fg.camera(), t = target();
+      var off = { x: cam.position.x - t.x, y: cam.position.y - t.y, z: cam.position.z - t.z };
+      var up = norm(cam.up || { x: 0, y: 1, z: 0 });
+
+      if (yawDeg) off = rotAbout(off, up, yawDeg * Math.PI / 180);
+
+      if (pitchDeg) {
+        var f = norm({ x: -off.x, y: -off.y, z: -off.z });
+        var right = norm({
+          x: f.y * up.z - f.z * up.y,
+          y: f.z * up.x - f.x * up.z,
+          z: f.x * up.y - f.y * up.x
+        });
+        var next = rotAbout(off, right, pitchDeg * Math.PI / 180);
+        var n = norm(next);
+        // cos of the angle to the up axis; stop about 10 degrees short of it.
+        var cosUp = n.x * up.x + n.y * up.y + n.z * up.z;
+        if (Math.abs(cosUp) < 0.985) off = next;
+      }
+
+      cam.position.x = t.x + off.x;
+      cam.position.y = t.y + off.y;
+      cam.position.z = t.z + off.z;
+      commit();
+    }
+
+    /* Pan in fractions of the viewport, so a press moves the same apparent
+       amount whether you are far out or right up against a node. */
+    function pan(fx, fy) {
+      if (!fg) return;
+      var cam = fg.camera(), t = target();
+      var off = { x: cam.position.x - t.x, y: cam.position.y - t.y, z: cam.position.z - t.z };
+      var dist = Math.hypot(off.x, off.y, off.z) || 1;
+      var up = norm(cam.up || { x: 0, y: 1, z: 0 });
+      var f = norm({ x: -off.x, y: -off.y, z: -off.z });
+      var right = norm({
+        x: f.y * up.z - f.z * up.y,
+        y: f.z * up.x - f.x * up.z,
+        z: f.x * up.y - f.y * up.x
+      });
+      var trueUp = {
+        x: right.y * f.z - right.z * f.y,
+        y: right.z * f.x - right.x * f.z,
+        z: right.x * f.y - right.y * f.x
+      };
+      var span = 2 * Math.tan(((cam.fov || 50) * Math.PI / 180) / 2) * dist;
+      var dx = right.x * fx * span + trueUp.x * fy * span;
+      var dy = right.y * fx * span + trueUp.y * fy * span;
+      var dz = right.z * fx * span + trueUp.z * fy * span;
+      cam.position.x += dx; cam.position.y += dy; cam.position.z += dz;
+      if (t !== centre) { t.x += dx; t.y += dy; t.z += dz; }
+      commit();
+    }
+
+    /* factor < 1 moves in. Floored so repeated presses cannot land the camera
+       exactly on the target, where the view direction becomes undefined. */
+    function dolly(factor) {
+      if (!fg) return;
+      var cam = fg.camera(), t = target();
+      var off = { x: cam.position.x - t.x, y: cam.position.y - t.y, z: cam.position.z - t.z };
+      var dist = Math.hypot(off.x, off.y, off.z);
+      if (!dist) return;
+      var next = Math.max(dist * factor, 1);
+      var k = next / dist;
+      cam.position.x = t.x + off.x * k;
+      cam.position.y = t.y + off.y * k;
+      cam.position.z = t.z + off.z * k;
+      commit();
+    }
+
     /* Re-frame right now, for the toolbar's Fit view button: waiting for a
        settle that may never come again would make the button look broken. */
     function fitNow() { fit(600); }
@@ -459,6 +572,9 @@
       resize: resize,
       refit: refit,
       fitNow: fitNow,
+      orbit: orbit,
+      pan: pan,
+      dolly: dolly,
       repaintTheme: repaintTheme,
       destroy: destroy,
       isReady: function () { return !!fg; }

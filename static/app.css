@@ -298,3 +298,61 @@ body.embed #graph { position: absolute; inset: 0; }
   inset: 0;
   pointer-events: none;
 }
+
+/* ---------- 3D camera pad ----------
+   TrackballControls is mouse-only, and with the library's own nav-info banner
+   turned off nothing on screen said that right-drag pans. The pad gives the
+   same verbs a visible home, and prints the bindings underneath. */
+.campad {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.campad[hidden] { display: none; }
+
+.campad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 26px);
+  grid-auto-rows: 24px;
+  gap: 3px;
+}
+.campad-row { display: flex; gap: 3px; }
+.campad-row button { flex: 1 1 auto; height: 24px; }
+
+.campad button {
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* The pad is held down repeatedly; a text selection dragging out of it looks
+   like a bug. */
+.campad button { user-select: none; -webkit-user-select: none; }
+
+.campad-keys {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+  /* Wide enough that each line of bindings stays on one line. Wrapping split
+     "F fit" across two rows and read as a stray letter. */
+  width: 252px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  /* The legend already claims the bottom-left; keep the pad clear of it and
+     drop the keyboard line, which no phone can use. */
+  .campad { right: 8px; bottom: 8px; }
+  .campad-keys div:last-child { display: none; }
+}

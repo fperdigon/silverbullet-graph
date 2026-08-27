@@ -135,6 +135,7 @@
 
   var TOGGLES = [
     { key: "showUnresolved", label: "Show unresolved (broken links)" },
+    { key: "showFps",        label: "Show FPS" },
     { key: "pinOnDrag",      label: "Pin nodes where I drop them",
       hint: "Off: a dragged node springs back into the layout, like Obsidian. " +
             "On: it stays put. Double-click a node to unpin it, or double-click " +
@@ -142,7 +143,8 @@
   ];
 
   var TOGGLES_3D = [
-    { key: "showUnresolved", label: "Show unresolved (broken links)" }
+    { key: "showUnresolved", label: "Show unresolved (broken links)" },
+    { key: "showFps",        label: "Show FPS" }
   ];
 
   var controlsEl = document.getElementById("controls");
@@ -201,6 +203,7 @@
     input.checked = !!P[c.key];
     input.addEventListener("change", function () {
       view.setParam(c.key, input.checked);
+      if (c.key === "showFps") paintPerf();
       if (onChange) onChange(c.key);
     });
     lab.appendChild(input);
@@ -340,6 +343,8 @@
     buildControls();
   }
 
+  function paintPerf() { perfEl.hidden = !view.params().showFps; }
+
   function drawLegend() {
     legendEl.innerHTML = "";
     var folders = view.folders();
@@ -446,7 +451,10 @@
     graph3dEl.hidden = !on;
     // The legend stays up in 3D: it is the colour key for what you are looking
     // at, and its folder switches drive both views.
-    perfEl.hidden = on;
+    // The readout used to be dropped in 3D because the camera pad owns that
+    // corner. It is useful precisely there, so lift it above the pad instead.
+    perfEl.classList.toggle("with-pad", on);
+    paintPerf();
     document.getElementById("panel-title").textContent = on ? "3D view" : "Controls";
     // The panel, the search box and Fit view all mean something in 3D now, so
     // rebuild the panel for whichever view is up rather than disabling them.
@@ -595,7 +603,11 @@
   });
   paintThemeBtn();
 
-  /* ---- rolling frame-time readout ---- */
+  /* ---- rolling frame-rate readout ----
+     Still measured as a median frame time, because the mean is dragged around
+     by a single long frame and this is meant to answer "is it smooth", not
+     "what was the worst frame". Reported as FPS, which is the number people
+     actually have a reference for: 60 is good, 30 is visibly not. */
   (function perf() {
     var last = performance.now(), acc = [], shown = 0;
     function tick(now) {
@@ -607,7 +619,9 @@
         acc = [];
         if (now - shown > 900) {
           shown = now;
-          perfEl.textContent = med.toFixed(1) + " ms/frame";
+          // Nothing is idle enough to divide by zero here, but a stalled tab
+          // can hand back a 0ms delta and Infinity fps reads as a bug.
+          perfEl.textContent = med > 0 ? Math.round(1000 / med) + " fps" : "-- fps";
         }
       }
       requestAnimationFrame(tick);
@@ -616,6 +630,7 @@
   })();
 
   paintLabelBtn();
+  paintPerf();
   buildControls();
   view.load().then(function () { view.live(); }).catch(function (e) {
     statsEl.textContent = "error: " + e.message;

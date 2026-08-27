@@ -395,3 +395,8 @@ body.embed #graph { position: absolute; inset: 0; }
 /* Indented to sit under its own option rather than reading as a note on the
    whole group. */
 .hint-radio { margin-left: 19px; margin-top: 1px; }
+
+/* The frame-rate readout shares the bottom-right corner with the 3D camera pad;
+   lift it clear rather than hiding it, since 3D is where it matters most. */
+.perf.with-pad { bottom: 178px; }
+.perf[hidden] { display: none; }

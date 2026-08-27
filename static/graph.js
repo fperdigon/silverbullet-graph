@@ -23,6 +23,7 @@
     labelRank: "depth",  // what a tier means: "depth" (folder) | "links" (degree)
     labelDensity: 0,     // shifts the auto threshold; -2 sparser, +2 denser
     showUnresolved: true,
+    showFps: true,       // the frame-rate readout in the corner
     pinOnDrag: false     // keep a node where you drop it, Obsidian-style release if off
   };
 

@@ -79,7 +79,9 @@
     // one label setting drives both views, so the toolbar button means the same
     // thing wherever you press it.
     var P = loadParams();
-    var labels = { show: true, degree: 4 };
+    var labels = { mode: "auto", density: 0 };
+    var fitDist = 0;      // camera distance at the fitted view; the LOD reference
+    var centre = { x: 0, y: 0, z: 0 };
     var query = "";
     var miss = null;          // null = no query; otherwise ids that do not match
 
@@ -110,7 +112,7 @@
     function drawLabels() {
       var size = overlaySize();
       octx.clearRect(0, 0, size.w, size.h);
-      if (!fg || !labels.show) return;
+      if (!fg || labels.mode === "off") return;
 
       var cam = fg.camera();
       if (!cam || !cam.position) return;
@@ -120,12 +122,23 @@
       cam.getWorldDirection(camDir);
       var cx = cam.position.x, cy = cam.position.y, cz = cam.position.z;
 
-      var showAll = labels.degree <= 0;
+      var showAll = labels.mode === "all";
+      // 3D has no zoom factor, so the camera's distance from the graph stands in
+      // for one: half the fitted distance reads as twice the zoom. Expressed
+      // against the same fitted reference the 2D view uses, so both reveal the
+      // same labels at the same apparent scale.
+      var lvl = Infinity;
+      if (!showAll) {
+        var here = Math.hypot(cx - centre.x, cy - centre.y, cz - centre.z);
+        var zf = (fitDist && here) ? fitDist / here : 1;
+        lvl = global.SBGraphLOD.level(zf, labels.density);
+      }
+
       var out = [], i, n, d;
       for (i = 0; i < current.nodes.length; i++) {
         n = current.nodes[i];
         if (n.x === undefined) continue;                       // not laid out yet
-        if (!showAll && (n.degree || 0) < labels.degree) continue;
+        if (n.labelScore > lvl) continue;
         if (miss && miss[n.id]) continue;
         // Depth along the view axis. Negative means the node is behind the
         // camera, where projection mirrors it to a plausible-looking but wrong
@@ -246,7 +259,8 @@
        view's arrays would corrupt them. */
     function setData(data) {
       current = {
-        nodes: (data.nodes || []).map(function (n) { return Object.assign({}, n); }),
+        nodes: global.SBGraphLOD.assign(
+          (data.nodes || []).map(function (n) { return Object.assign({}, n); })),
         links: (data.links || []).map(function (l) {
           return { source: l.source, target: l.target, unresolved: l.unresolved };
         })
@@ -302,16 +316,16 @@
     }
 
     function setLabels(next) {
-      if (typeof next.show === "boolean") labels.show = next.show;
-      if (typeof next.degree === "number") labels.degree = next.degree;
-      if (labels.show && active) startLoop(); else stopLoop();
+      if (typeof next.mode === "string") labels.mode = next.mode;
+      if (typeof next.density === "number") labels.density = next.density;
+      if (labels.mode !== "off" && active) startLoop(); else stopLoop();
     }
 
     /* Called when the 3D view comes on or off screen. A hidden container
        measures 0x0, so the overlay must not keep painting into it. */
     function setActive(on) {
       active = !!on;
-      if (active) { resize(); if (labels.show) startLoop(); }
+      if (active) { resize(); if (labels.mode !== "off") startLoop(); }
       else stopLoop();
     }
 
@@ -382,7 +396,10 @@
       if (!(dist > 0)) { fg.zoomToFit(ms, 20); return; }
       dist *= 1.08;   // a margin, rather than pressing nodes against the edge
 
-      var centre = { x: cx, y: cy, z: cz };
+      // Reference point for the label tiers: this distance is "fitted", and
+      // the LOD threshold moves as the camera closes on or backs away from it.
+      fitDist = dist;
+      centre = { x: cx, y: cy, z: cz };
       fg.cameraPosition({
         x: cx + fx * dist, y: cy + fy * dist, z: cz + fz * dist
       }, centre, ms);

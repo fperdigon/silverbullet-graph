@@ -24,9 +24,11 @@ Tested against SilverBullet **2.9.0**.
 - **3D view.** A WebGL mode you can orbit, zoom and drag nodes in. Click a node
   to open the page, same as in 2D. Search, the folder legend, labels and its own
   controls panel all work over there too.
-- **Labels on demand.** One toolbar button cycles hub labels, every label, or
-  none, and means the same thing in both views. In 3D the labels are projected
-  onto an overlay canvas and fade with distance.
+- **Labels that follow the hierarchy.** Zoomed out you see the top of the tree;
+  zoom in and each folder level below appears in turn. One toolbar button cycles
+  auto, every label, or none, and means the same thing in both views. In 3D the
+  camera's distance stands in for zoom, and labels are projected onto an overlay
+  canvas and fade with distance.
 - **Clickable legend.** Click a folder's colour to drop it out of the layout;
   the rest re-settles into the space it freed. Click again to bring it back.
 - **Embeddable preview** you can drop into your index page with a Space Lua widget.

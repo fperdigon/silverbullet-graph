@@ -19,8 +19,8 @@
     gravity: 0.06,       // pull toward centre; keeps orphans from flying off
     collide: 5,          // extra spacing around each node
     nodeScale: 1,        // node radius multiplier
-    labelDegree: 4,      // hide labels below this many links
-    showLabels: true,
+    labelMode: "auto",   // "auto" (zoom-tiered) | "all" | "off"
+    labelDensity: 0,     // shifts the auto threshold; -2 sparser, +2 denser
     showUnresolved: true,
     pinOnDrag: false     // keep a node where you drop it, Obsidian-style release if off
   };
@@ -78,10 +78,56 @@
     } catch (e) { /* non-fatal */ }
   }
 
+  /* ---- level-of-detail labelling -------------------------------------
+     Labels come in by folder depth: root pages first, then one level down, and
+     so on as you zoom in. Within a depth they arrive most-linked first, which
+     is a tie-break rather than a second signal — without it the 149 pages at
+     depth 1 in a space like this would all appear on one frame, which is not a
+     level of detail, just a cliff.
+
+     Each node gets a score of depth + (its rank within that depth), so scores
+     sit in [depth, depth+1) and a single rising threshold walks the hierarchy.
+
+     Note this makes a shallow page outrank a deep hub: `Mermaid Demo` at the
+     root is labelled before `Homelab/Homelab - Map of Content` and its 120
+     links. That is what depth-first ordering means, and it is deliberate. */
+  function assignLabelScores(nodes) {
+    var byDepth = new Map();
+    nodes.forEach(function (n) {
+      var d = (n.id.match(/\//g) || []).length;
+      n.depth = d;
+      if (!byDepth.has(d)) byDepth.set(d, []);
+      byDepth.get(d).push(n);
+    });
+    byDepth.forEach(function (list, d) {
+      list.sort(function (a, b) {
+        return (b.degree || 0) - (a.degree || 0) ||
+               String(a.title || a.id).localeCompare(String(b.title || b.id));
+      });
+      for (var i = 0; i < list.length; i++) list[i].labelScore = d + i / list.length;
+    });
+    return nodes;
+  }
+
+  // One extra level of depth per 0.8 of a zoom doubling, starting part-way into
+  // depth 1 at the fitted view: far enough out to be a map, close enough that
+  // the view is not blank when it opens.
+  var LEVELS_PER_OCTAVE = 1.25;
+  var LEVEL_AT_FIT = 1.2;
+
+  /* zoomFactor is 1 at whatever the fitted view is, in either 2D or 3D, so the
+     two views reveal the same labels at the same apparent scale. */
+  function labelLevel(zoomFactor, density) {
+    var z = zoomFactor > 0 ? zoomFactor : 1e-3;
+    return LEVELS_PER_OCTAVE * (Math.log(z) / Math.LN2) + LEVEL_AT_FIT + (density || 0);
+  }
+
+  global.SBGraphLOD = { assign: assignLabelScores, level: labelLevel };
+
   function GraphView(opts) {
     var el = document.querySelector(opts.container);
     var compact = !!opts.compact;
-    // Label settings (showLabels, labelDegree, ...) are shared with the full
+    // Label settings (labelMode, labelDensity, ...) are shared with the full
     // view via localStorage, so the embed reads the same as whatever you last
     // set there. Only layout density is forced: the full view's spacing
     // sprawls a small iframe off-frame, so those three stay fixed regardless
@@ -268,17 +314,17 @@
         }
       }
 
-      // --- labels: only what is legible and worth reading ---
-      // A cutoff of 0 means "label everything". That is an explicit request, so
-      // it also lifts the two implicit filters that otherwise hide labels: the
-      // zoom gate, and the hover focus that normally narrows labels to the
-      // hovered node and its neighbours.
-      // The compact preview fits a whole space into a few hundred pixels, so
-      // its resting zoom level is much lower than the full view's; gating on
-      // the same 0.35 meant labels never appeared without zooming in first.
-      var showAllLabels = P.labelDegree <= 0;
-      var labelZoomMin = compact ? 0.1 : 0.35;
-      if (P.showLabels && (showAllLabels || t.k > labelZoomMin)) {
+      // --- labels ---
+      // "auto" walks the folder hierarchy as you zoom: a rising threshold that
+      // admits root pages first, then each level below. "all" ignores the
+      // threshold entirely, and also lifts the hover focus that otherwise
+      // narrows labels to the hovered node and its neighbours.
+      // No separate zoom gate is needed any more: in auto the zoom IS the gate,
+      // and in all the user has asked for everything.
+      if (P.labelMode !== "off") {
+        var showAllLabels = P.labelMode === "all";
+        var lvl = showAllLabels ? Infinity
+          : labelLevel(t.k / (state.fitK || t.k || 1), P.labelDensity);
         ctx.globalAlpha = 1;
         var fs = Math.max(8.5 / t.k, 3);
         ctx.font = fs + "px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif";
@@ -288,7 +334,7 @@
           var m = state.nodes[i];
           var near = state.hover && (m.id === state.hover || hot.has(m.id));
           if (state.hover && !near && !showAllLabels) continue;
-          if (!near && !showAllLabels && m.degree < P.labelDegree) continue;
+          if (!near && m.labelScore > lvl) continue;
           if (hasQuery && state.queryMiss.has(m.id)) continue;
           // With everything labelled, hovering still has to read as focus, so
           // push the rest back rather than hiding them.
@@ -388,6 +434,7 @@
         if (saved) { o.x = saved.x; o.y = saved.y; }
         return o;
       });
+      assignLabelScores(state.nodes);
       state.byId = new Map(state.nodes.map(function (n) { return [n.id, n]; }));
 
       state.links = state.raw.links
@@ -450,6 +497,9 @@
       var tr = d3.zoomIdentity
         .translate(s.w / 2 - k * (minX + maxX) / 2, s.h / 2 - k * (minY + maxY) / 2)
         .scale(k);
+      // The label tiers are expressed relative to the fitted view, so this is
+      // the reference both this view and the 3D one measure zoom against.
+      state.fitK = k;
       var sel = d3.select(canvas);
       if (duration) sel.transition().duration(duration).call(zoom.transform, tr);
       else sel.call(zoom.transform, tr);
@@ -646,7 +696,7 @@
         P[name] = value;
         saveParams(P);
         if (name === "showUnresolved") { build(); return; }
-        if (name === "showLabels" || name === "labelDegree" || name === "pinOnDrag") {
+        if (name === "labelMode" || name === "labelDensity" || name === "pinOnDrag") {
           scheduleDraw();
           return;
         }

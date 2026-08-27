@@ -13,7 +13,7 @@
     <input type="search" id="q" placeholder="Filter pages..." autocomplete="off">
     <button id="reset">Fit view</button>
     <button id="refresh">Refresh</button>
-    <button id="labels" title="Cycle labels: hubs only, every page, or none">Labels: hubs</button>
+    <button id="labels">Labels: auto</button>
     <button id="toggle-panel" title="Layout controls">Controls</button>
     <button id="toggle-3d" title="Switch between the 2D canvas and a 3D WebGL view">3D</button>
     <button id="theme" title="Theme: follow system, light, or dark">Theme: auto</button>
@@ -79,8 +79,8 @@
       hint: "Pull toward the centre. Raise it to gather orphan pages in." },
     { key: "nodeScale",    label: "Node size",     min: 0.4, max: 3,   step: 0.1,
       hint: "Multiplier on node radius." },
-    { key: "labelDegree",  label: "Label cutoff",  min: 0,   max: 25,  step: 1,
-      hint: "Hide labels for pages with fewer links than this. 0 shows everything." }
+    { key: "labelDensity", label: "Label density", min: -2, max: 2, step: 0.25,
+      hint: "Shifts how early labels appear as you zoom in. Negative is sparser, positive denser. Ignored when labels are set to all." }
   ];
 
   /* The 3D view has its own, much shorter control set: most 2D sliders drive
@@ -92,17 +92,15 @@
       hint: "Multiplier on node size." },
     { key: "linkOpacity", label: "Link opacity", min: 0,   max: 1, step: 0.05, own: true,
       hint: "Fade the links back to let the nodes and labels read." },
-    { key: "labelDegree", label: "Label cutoff", min: 0,   max: 25, step: 1,
-      hint: "Hide labels for pages with fewer links than this. 0 shows everything." }
+    { key: "labelDensity", label: "Label density", min: -2, max: 2, step: 0.25,
+      hint: "Shifts how early labels appear as the camera closes in. Negative is sparser, positive denser." }
   ];
 
   var TOGGLES_3D = [
-    { key: "showLabels",     label: "Show labels" },
     { key: "showUnresolved", label: "Show unresolved (broken links)" }
   ];
 
   var TOGGLES = [
-    { key: "showLabels",     label: "Show labels" },
     { key: "showUnresolved", label: "Show unresolved (broken links)" },
     { key: "pinOnDrag",      label: "Pin nodes where I drop them",
       hint: "Off: a dragged node springs back into the layout, like Obsidian. " +
@@ -238,7 +236,6 @@
       input.checked = !!P[c.key];
       input.addEventListener("change", function () {
         view.setParam(c.key, input.checked);
-        if (c.key === "showLabels") { refreshLabels(); paintLabelBtn(); }
         // The unresolved toggle changes which nodes exist in 3D, not just how
         // they look, so the filtered set has to be pushed again.
         if (c.key === "showUnresolved") push3d(true);
@@ -260,33 +257,29 @@
      One setting drives both views. The toolbar button cycles the three states
      people actually want; the panel's cutoff slider is the fine control behind
      it, and both stay in step because they read the same parameters. */
-  var lastCutoff = 4;
+  var LABEL_HINT = {
+    auto: "Labels follow the folder hierarchy as you zoom: root pages first, then each level below",
+    all: "Every label, at every zoom",
+    off: "No labels"
+  };
 
-  function labelMode() {
-    var P = view.params();
-    if (!P.showLabels) return "off";
-    return P.labelDegree <= 0 ? "all" : "hubs";
-  }
+  function labelMode() { return view.params().labelMode; }
 
   function paintLabelBtn() {
     var m = labelMode();
     labelBtn.textContent = "Labels: " + m;
     labelBtn.classList.toggle("active", m === "all");
+    labelBtn.title = LABEL_HINT[m] || "";
   }
 
   function refreshLabels() {
     if (!g3d || !g3d.isReady()) return;
     var P = view.params();
-    g3d.setLabels({ show: !!P.showLabels, degree: P.labelDegree });
+    g3d.setLabels({ mode: P.labelMode, density: P.labelDensity });
   }
 
   function setLabelMode(m) {
-    if (m === "off") {
-      view.setParam("showLabels", false);
-    } else {
-      view.setParam("showLabels", true);
-      view.setParam("labelDegree", m === "all" ? 0 : (lastCutoff || 4));
-    }
+    view.setParam("labelMode", m);
     paintLabelBtn();
     refreshLabels();
     buildControls();
@@ -339,13 +332,9 @@
   /* ---- wiring ---- */
   var panel = document.getElementById("panel");
   var labelBtn = document.getElementById("labels");
-  var CYCLE = ["hubs", "all", "off"];
+  var CYCLE = ["auto", "all", "off"];
   labelBtn.addEventListener("click", function () {
-    var m = labelMode();
-    // Remember the cutoff being left behind, so coming back to "hubs" restores
-    // whatever the slider was set to rather than snapping to the default.
-    if (m === "hubs") lastCutoff = view.params().labelDegree;
-    setLabelMode(CYCLE[(CYCLE.indexOf(m) + 1) % CYCLE.length]);
+    setLabelMode(CYCLE[(CYCLE.indexOf(labelMode()) + 1) % CYCLE.length]);
   });
   document.getElementById("toggle-panel").addEventListener("click", function () {
     panel.hidden = !panel.hidden;

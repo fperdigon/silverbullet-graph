@@ -20,6 +20,7 @@
     collide: 5,          // extra spacing around each node
     nodeScale: 1,        // node radius multiplier
     labelMode: "auto",   // "auto" (zoom-tiered) | "all" | "off"
+    labelRank: "depth",  // what a tier means: "depth" (folder) | "links" (degree)
     labelDensity: 0,     // shifts the auto threshold; -2 sparser, +2 denser
     showUnresolved: true,
     pinOnDrag: false     // keep a node where you drop it, Obsidian-style release if off
@@ -91,7 +92,14 @@
      Note this makes a shallow page outrank a deep hub: `Mermaid Demo` at the
      root is labelled before `Homelab/Homelab - Map of Content` and its 120
      links. That is what depth-first ordering means, and it is deliberate. */
-  function assignLabelScores(nodes) {
+  function byDegreeDesc(a, b) {
+    return (b.degree || 0) - (a.degree || 0) ||
+           String(a.title || a.id).localeCompare(String(b.title || b.id));
+  }
+
+  /* Folder depth. Root pages first, then one level down, and so on. Ranking by
+     links within a depth is a tie-break, not a second signal. */
+  function scoreByDepth(nodes) {
     var byDepth = new Map();
     nodes.forEach(function (n) {
       var d = (n.id.match(/\//g) || []).length;
@@ -100,12 +108,32 @@
       byDepth.get(d).push(n);
     });
     byDepth.forEach(function (list, d) {
-      list.sort(function (a, b) {
-        return (b.degree || 0) - (a.degree || 0) ||
-               String(a.title || a.id).localeCompare(String(b.title || b.id));
-      });
+      list.sort(byDegreeDesc);
       for (var i = 0; i < list.length; i++) list[i].labelScore = d + i / list.length;
     });
+  }
+
+  /* Link count. Most-linked first, ignoring where a page sits in the tree.
+     The scores have to land on the same scale as the depth ones: the zoom
+     threshold is shared, so if one signal produced scores in [0,5) and the
+     other in [0,1) then switching would flood or blank the view. LEVEL_SPAN
+     matches the depth range, and the exponent is calibrated so the opening
+     frame labels a comparable number either way rather than a tenth as many. */
+  var LEVEL_SPAN = 5;
+  var LINK_CURVE = 0.6;
+
+  function scoreByLinks(nodes) {
+    var sorted = nodes.slice().sort(byDegreeDesc);
+    var n = sorted.length || 1;
+    for (var i = 0; i < sorted.length; i++) {
+      sorted[i].depth = (sorted[i].id.match(/\//g) || []).length;
+      sorted[i].labelScore = LEVEL_SPAN * Math.pow(i / n, LINK_CURVE);
+    }
+  }
+
+  function assignLabelScores(nodes, rank) {
+    if (rank === "links") scoreByLinks(nodes);
+    else scoreByDepth(nodes);
     return nodes;
   }
 
@@ -434,7 +462,7 @@
         if (saved) { o.x = saved.x; o.y = saved.y; }
         return o;
       });
-      assignLabelScores(state.nodes);
+      assignLabelScores(state.nodes, P.labelRank);
       state.byId = new Map(state.nodes.map(function (n) { return [n.id, n]; }));
 
       state.links = state.raw.links
@@ -696,6 +724,13 @@
         P[name] = value;
         saveParams(P);
         if (name === "showUnresolved") { build(); return; }
+        if (name === "labelRank") {
+          // Only the scores change; the layout is untouched, so this must not
+          // go anywhere near build().
+          assignLabelScores(state.nodes, P.labelRank);
+          scheduleDraw();
+          return;
+        }
         if (name === "labelMode" || name === "labelDensity" || name === "pinOnDrag") {
           scheduleDraw();
           return;

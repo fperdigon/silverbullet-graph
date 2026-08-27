@@ -125,6 +125,51 @@
     { key: "showUnresolved", label: "Show unresolved (broken links)" }
   ];
 
+  /* Both label orderings ship; this picks which one a tier means. Shared by
+     the 2D and 3D panels, like every other label setting. */
+  var SELECTS = [
+    { key: "labelRank", label: "Label order",
+      options: [
+        { v: "depth", t: "Folder depth" },
+        { v: "links", t: "Link count" }
+      ],
+      hint: "Folder depth labels root pages first, then each level below. " +
+            "Link count labels the most-linked pages first wherever they sit in the tree." }
+  ];
+
+  function buildSelects(host) {
+    var P = view.params();
+    SELECTS.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "ctl";
+
+      var lab = document.createElement("label");
+      lab.textContent = c.label;
+
+      var sel = document.createElement("select");
+      c.options.forEach(function (o) {
+        var opt = document.createElement("option");
+        opt.value = o.v;
+        opt.textContent = o.t;
+        sel.appendChild(opt);
+      });
+      sel.value = P[c.key];
+      sel.addEventListener("change", function () {
+        view.setParam(c.key, sel.value);
+        refreshLabels();
+      });
+
+      var hint = document.createElement("div");
+      hint.className = "hint";
+      hint.textContent = c.hint;
+
+      row.appendChild(lab);
+      row.appendChild(sel);
+      row.appendChild(hint);
+      host.appendChild(row);
+    });
+  }
+
   var TOGGLES = [
     { key: "showUnresolved", label: "Show unresolved (broken links)" },
     { key: "pinOnDrag",      label: "Pin nodes where I drop them",
@@ -173,6 +218,8 @@
       controlsEl.appendChild(row);
       inputs[c.key] = { input: input, val: val };
     });
+
+    buildSelects(controlsEl);
 
     TOGGLES.forEach(function (c) {
       var row = document.createElement("div");
@@ -252,6 +299,8 @@
       controlsEl.appendChild(row);
     });
 
+    buildSelects(controlsEl);
+
     TOGGLES_3D.forEach(function (c) {
       var row = document.createElement("div");
       row.className = "ctl ctl-check";
@@ -302,7 +351,7 @@
   function refreshLabels() {
     if (!g3d || !g3d.isReady()) return;
     var P = view.params();
-    g3d.setLabels({ mode: P.labelMode, density: P.labelDensity });
+    g3d.setLabels({ mode: P.labelMode, density: P.labelDensity, rank: P.labelRank });
   }
 
   function setLabelMode(m) {

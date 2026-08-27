@@ -79,7 +79,7 @@
     // one label setting drives both views, so the toolbar button means the same
     // thing wherever you press it.
     var P = loadParams();
-    var labels = { mode: "auto", density: 0 };
+    var labels = { mode: "auto", density: 0, rank: "depth" };
     var fitDist = 0;      // camera distance at the fitted view; the LOD reference
     var centre = { x: 0, y: 0, z: 0 };
     var query = "";
@@ -273,7 +273,8 @@
     function setData(data) {
       current = {
         nodes: global.SBGraphLOD.assign(
-          (data.nodes || []).map(function (n) { return Object.assign({}, n); })),
+          (data.nodes || []).map(function (n) { return Object.assign({}, n); }),
+          labels.rank),
         links: (data.links || []).map(function (l) {
           return { source: l.source, target: l.target, unresolved: l.unresolved };
         })
@@ -331,6 +332,12 @@
     function setLabels(next) {
       if (typeof next.mode === "string") labels.mode = next.mode;
       if (typeof next.density === "number") labels.density = next.density;
+      if (typeof next.rank === "string" && next.rank !== labels.rank) {
+        labels.rank = next.rank;
+        // Rescore in place. The nodes are the library's own objects by now, so
+        // replacing them would restart the layout for a labelling change.
+        global.SBGraphLOD.assign(current.nodes, labels.rank);
+      }
       if (labels.mode !== "off" && active) startLoop(); else stopLoop();
     }
 

@@ -356,3 +356,16 @@ body.embed #graph { position: absolute; inset: 0; }
   .campad { right: 8px; bottom: 8px; }
   .campad-keys div:last-child { display: none; }
 }
+
+/* Panel select, matched to the range inputs beside it. */
+.ctl select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 5px;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 12px;
+}
+.ctl select:focus { outline: none; border-color: var(--accent); }

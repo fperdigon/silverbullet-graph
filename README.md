@@ -26,8 +26,12 @@ Tested against SilverBullet **2.9.0**.
   a button and an arrow key, and the mouse and keyboard bindings are printed
   under the pad. Search, the folder legend, labels and its own
   controls panel all work over there too.
-- **Labels that follow the hierarchy.** Zoomed out you see the top of the tree;
-  zoom in and each folder level below appears in turn. One toolbar button cycles
+- **Labels that arrive in tiers.** Zoomed out you see the top of the space; zoom
+  in and the next tier appears, and so on. A tier means either **folder depth**
+  (root pages first, then each level below) or **link count** (most-linked
+  first, wherever it sits in the tree) - pick one in the controls; both are
+  calibrated to label the same number at the opening view. One toolbar button
+  cycles
   auto, every label, or none, and means the same thing in both views. In 3D the
   distance to each node stands in for zoom, so flying into a cluster labels what
   you came to read without labelling the far side of the graph. Labels are

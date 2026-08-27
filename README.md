@@ -25,6 +25,9 @@ Tested against SilverBullet **2.9.0**.
 - **Live updates.** A page save pushes a webhook and only that page is reparsed.
 - **Broken-link detection.** Wikilinks pointing at pages that do not exist are
   drawn as hollow, dashed nodes.
+- **Frontmatter links count.** A `[[wikilink]]` in a YAML attribute is a real
+  link, and spaces use attributes like `parents:` or `siblings:` to express
+  relationships that appear nowhere else on the page.
 - **Canvas renderer**, so a few thousand edges stay at 60fps and the page does
   no work at all once the layout settles.
 - Works with mouse and touch: drag nodes, pinch, pan.
@@ -220,6 +223,20 @@ theme it is sitting inside.
 
 A few things here are not obvious and were expensive to find:
 
+- **Links resolve by two different rules, and mixing them up silently loses
+  edges.** `[[wikilinks]]` are absolute from the space root. Plain Markdown
+  links are rendered as ordinary HTML, so the browser resolves them relative to
+  the folder of the page they sit on — `[x](sibling.md)` on `A/B/Page` means
+  `A/B/sibling`, not `sibling`. `extract_links` therefore needs the page name,
+  and only Markdown links are given the folder as a base.
+- **Frontmatter is stripped for code and prose, but scanned for wikilinks
+  first.** Dropping it wholesale looked harmless and cost this space 289 real
+  edges across 59 pages, because its family tree records `parents:` and
+  `siblings:` only as frontmatter attributes.
+- **A mutual link is one edge.** Deduplicating on the unordered pair matters
+  beyond tidiness: counting `A -> B` and `B -> A` separately doubles both
+  endpoints' `degree`, which drives node radius and the label cutoff, and makes
+  the pair pull twice as hard in the force layout.
 - **After changing the parser, call `/api/rebuild`.** A normal reconcile only
   refetches files whose mtime moved, and parser changes do not touch mtimes, so
   cached pages keep their old link lists.

@@ -140,12 +140,21 @@ class Graph:
         degree: dict[str, int] = {}
         links: list[dict] = []
         seen: set[tuple[str, str]] = set()
+        targets: set[str] = set()
 
         for src, meta in self.pages.items():
             for dst in meta.get("links", []):
-                if dst == src or (src, dst) in seen:
+                if dst == src:
                     continue
-                seen.add((src, dst))
+                targets.add(dst)
+                # Two pages linking to each other are one edge, not two. Keying
+                # on the unordered pair stops a mutual link being drawn twice,
+                # counted twice in `degree` (which drives node size and the
+                # label cutoff), and pulling twice as hard in the force layout.
+                key = (src, dst) if src < dst else (dst, src)
+                if key in seen:
+                    continue
+                seen.add(key)
                 links.append({"source": src, "target": dst,
                               "unresolved": dst not in existing})
                 degree[src] = degree.get(src, 0) + 1
@@ -161,7 +170,9 @@ class Graph:
             }
             for p in sorted(self.pages)
         ]
-        ghosts = {d for _, d in seen} - existing
+        # From `targets`, not `seen`: `seen` holds unordered pairs, so a ghost
+        # can sit in either slot and reading only the second would miss it.
+        ghosts = targets - existing
         nodes += [
             {
                 "id": g,
@@ -253,7 +264,7 @@ async def refresh_pages(
                 return
             info = meta.get(page, {})
             targets = {
-                t for t in extract_links(text)
+                t for t in extract_links(text, page)
                 if not excluded(t) and t not in att
             }
             GRAPH.pages[page] = {

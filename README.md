@@ -22,8 +22,9 @@ Tested against SilverBullet **2.9.0**.
 
 - **Full view** with search, layout controls and a folder legend.
 - **3D view.** A WebGL mode you can orbit, zoom and drag nodes in. Click a node
-  to open the page, same as in 2D. A camera pad gives every move a button and an
-  arrow key, and prints the mouse and keyboard bindings underneath it. Search, the folder legend, labels and its own
+  to open the page, same as in 2D. Shift-drag pans, a camera pad gives every move
+  a button and an arrow key, and the mouse and keyboard bindings are printed
+  under the pad. Search, the folder legend, labels and its own
   controls panel all work over there too.
 - **Labels that follow the hierarchy.** Zoomed out you see the top of the tree;
   zoom in and each folder level below appears in turn. One toolbar button cycles

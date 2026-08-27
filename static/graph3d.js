@@ -256,6 +256,10 @@
         // Appended after the library has built its own canvas so it stacks on
         // top without needing a z-index fight.
         el.appendChild(over);
+        el.addEventListener("pointerdown", onPointerDown);
+        el.addEventListener("pointermove", onPointerMove);
+        el.addEventListener("pointerup", onPointerUp);
+        el.addEventListener("pointercancel", onPointerUp);
         setData(data);
         resize();
         startLoop();
@@ -527,6 +531,47 @@
       commit();
     }
 
+    /* Shift-drag pans.
+       TrackballControls does not offer this: its modifier keys are A to force
+       rotate, S to zoom and D to pan, and Shift means nothing to it. But the
+       keyboard bindings here already read Shift as "pan", so Shift-drag doing
+       nothing was a hole in a convention this code invented.
+
+       Rather than fight the controls for the same drag, disable them for the
+       duration and run the pan directly. Restoring on pointerup rather than on
+       Shift being released keeps a gesture whole: letting go of the modifier
+       mid-drag should not hand the camera back to the rotator halfway. */
+    var panDrag = null;
+
+    function onPointerDown(e) {
+      if (!fg || e.button !== 0 || !e.shiftKey || panDrag) return;
+      var c = ctrls();
+      if (!c) return;
+      panDrag = { x: e.clientX, y: e.clientY, wasEnabled: c.enabled !== false };
+      c.enabled = false;
+      e.preventDefault();
+      if (el.setPointerCapture) { try { el.setPointerCapture(e.pointerId); } catch (err) {} }
+    }
+
+    function onPointerMove(e) {
+      if (!panDrag) return;
+      var h = el.getBoundingClientRect().height || 1;
+      // Height for both axes: pan() measures its fractions against the vertical
+      // world span, so using width for x would make horizontal drags track the
+      // cursor at the wrong rate on any non-square viewport.
+      pan(-(e.clientX - panDrag.x) / h, (e.clientY - panDrag.y) / h);
+      panDrag.x = e.clientX;
+      panDrag.y = e.clientY;
+    }
+
+    function onPointerUp(e) {
+      if (!panDrag) return;
+      var c = ctrls();
+      if (c) c.enabled = panDrag.wasEnabled;
+      if (el.releasePointerCapture) { try { el.releasePointerCapture(e.pointerId); } catch (err) {} }
+      panDrag = null;
+    }
+
     /* Re-frame right now, for the toolbar's Fit view button: waiting for a
        settle that may never come again would make the button look broken. */
     function fitNow() { fit(600); }
@@ -549,6 +594,12 @@
     function destroy() {
       destroyed = true;
       stopLoop();
+      if (el) {
+        el.removeEventListener("pointerdown", onPointerDown);
+        el.removeEventListener("pointermove", onPointerMove);
+        el.removeEventListener("pointerup", onPointerUp);
+        el.removeEventListener("pointercancel", onPointerUp);
+      }
       if (fg) {
         // _destructor releases the WebGL context. Without it, toggling in and
         // out of 3D leaks a renderer per visit and the browser eventually drops

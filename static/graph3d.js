@@ -230,7 +230,17 @@
           .nodeLabel(function (n) { return n.id; })
           .nodeColor(colourFor)
           .nodeVal(valFor)
-          .nodeOpacity(0.92)
+          // The library defaults to nodeResolution 8, i.e. SphereGeometry(r,8,8),
+          // which is a visibly faceted polyhedron rather than a ball once a hub
+          // is more than a few pixels across. 16 reads as round at any size the
+          // camera reaches; the cost is about 190k triangles for a 373-node
+          // space, which is nothing for WebGL.
+          .nodeResolution(16)
+          // Opaque on purpose. Anything below 1 makes the material transparent,
+          // and then each sphere's own back faces show through and depth-sort
+          // against its front, which looked like the balls had been sliced.
+          // Depth already reads from the link opacity and the label fade.
+          .nodeOpacity(1)
           .linkColor(function () { return t.link; })
           .linkOpacity(P.linkOpacity)
           .linkWidth(0.4)

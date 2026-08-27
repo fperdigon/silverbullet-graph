@@ -321,17 +321,20 @@
     function refit() { fitPending = true; }
 
     /* Frame the graph properly. The library's own zoomToFit is not usable
-       here for two reasons, both visible on a 372-node space: it measures the
-       extent from the world origin rather than from where the graph actually
-       is, and its distance formula divides by atan(fov) where the geometry
-       calls for tan(fov/2). Together those opened the homelab graph as a knot
-       of 2px dots in the middle of an empty frame.
+       here: it measures the extent from the world origin rather than from where
+       the graph actually is, and its distance formula divides by atan(fov)
+       where the geometry calls for tan(fov/2). On a 372-node space that opened
+       the 3D view as a knot of 2px dots in an empty frame.
 
-       This fit takes the centroid, uses a 97th-percentile radius so a handful
-       of weakly-linked pages flung out by repulsion cannot dictate the zoom for
-       everything else, and keeps whatever direction the camera is already
-       looking from. The strays are still there; you just have to scroll out to
-       them instead of starting there. */
+       Fitting a sphere around the cloud is not enough either. A layout that is
+       deep along the view axis has a large 3D radius but a small silhouette, so
+       a sphere fit still pulls the camera much too far back. What has to fit is
+       the extent perpendicular to where the camera is looking, per point, with
+       each point's own depth taken into account.
+
+       The 97th percentile keeps a handful of weakly-linked pages flung out by
+       repulsion from dictating the zoom for everything else. They are still
+       there; you scroll out to them rather than starting there. */
     function fit(ms) {
       if (!fg) return;
       var pts = [], i, n;
@@ -345,29 +348,43 @@
       for (i = 0; i < pts.length; i++) { cx += pts[i].x; cy += pts[i].y; cz += pts[i].z; }
       cx /= pts.length; cy /= pts.length; cz /= pts.length;
 
-      var d = [];
-      for (i = 0; i < pts.length; i++) {
-        d.push(Math.hypot(pts[i].x - cx, pts[i].y - cy, pts[i].z - cz));
-      }
-      d.sort(function (a, b) { return a - b; });
-      var R = d[Math.min(d.length - 1, Math.floor(d.length * 0.97))] || d[d.length - 1];
-      if (!R) { fg.zoomToFit(ms, 20); return; }
-
       var cam = fg.camera();
-      var half = (cam.fov || 50) * Math.PI / 360;      // half the vertical fov
-      // The horizontal field is the wider one on any landscape viewport, so the
-      // vertical is what actually binds; 1.1 leaves a margin rather than
-      // pressing the outermost node against the edge.
-      var dist = (R / Math.tan(half)) * 1.1;
+      // Camera basis, derived by hand: the bundle keeps its THREE namespace
+      // private, so there are no vector helpers to borrow.
+      var fx = cam.position.x - cx, fy = cam.position.y - cy, fz = cam.position.z - cz;
+      var fl = Math.hypot(fx, fy, fz);
+      if (!fl) { fx = 0; fy = 0; fz = 1; fl = 1; }
+      fx /= fl; fy /= fl; fz /= fl;
 
-      var vx = cam.position.x - cx, vy = cam.position.y - cy, vz = cam.position.z - cz;
-      var len = Math.hypot(vx, vy, vz);
-      if (!len) { vx = 0; vy = 0; vz = 1; len = 1; }
+      // right = worldUp x forward, falling back when the camera looks straight
+      // down and that cross product collapses.
+      var rx = fz, ry = 0, rz = -fx;
+      var rl = Math.hypot(rx, ry, rz);
+      if (rl < 1e-6) { rx = 1; ry = 0; rz = 0; rl = 1; }
+      rx /= rl; ry /= rl; rz /= rl;
+      var ux = fy * rz - fz * ry, uy = fz * rx - fx * rz, uz = fx * ry - fy * rx;
+
+      var tV = Math.tan(((cam.fov || 50) * Math.PI / 180) / 2);
+      var tH = tV * (cam.aspect || 1);
+
+      var need = [];
+      for (i = 0; i < pts.length; i++) {
+        var dx = pts[i].x - cx, dy = pts[i].y - cy, dz = pts[i].z - cz;
+        var pf = dx * fx + dy * fy + dz * fz;    // toward the camera
+        var pr = dx * rx + dy * ry + dz * rz;
+        var pu = dx * ux + dy * uy + dz * uz;
+        // Distance at which this point lands exactly on the frame edge.
+        need.push(Math.max(Math.abs(pr) / tH, Math.abs(pu) / tV) + pf);
+      }
+      need.sort(function (a, b) { return a - b; });
+      var dist = need[Math.min(need.length - 1, Math.floor(need.length * 0.97))];
+      if (!(dist > 0)) dist = need[need.length - 1];
+      if (!(dist > 0)) { fg.zoomToFit(ms, 20); return; }
+      dist *= 1.08;   // a margin, rather than pressing nodes against the edge
+
       var centre = { x: cx, y: cy, z: cz };
       fg.cameraPosition({
-        x: cx + (vx / len) * dist,
-        y: cy + (vy / len) * dist,
-        z: cz + (vz / len) * dist
+        x: cx + fx * dist, y: cy + fy * dist, z: cz + fz * dist
       }, centre, ms);
     }
 

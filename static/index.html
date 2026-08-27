@@ -13,6 +13,7 @@
     <input type="search" id="q" placeholder="Filter pages..." autocomplete="off">
     <button id="reset">Fit view</button>
     <button id="refresh">Refresh</button>
+    <button id="labels" title="Cycle labels: hubs only, every page, or none">Labels: hubs</button>
     <button id="toggle-panel" title="Layout controls">Controls</button>
     <button id="toggle-3d" title="Switch between the 2D canvas and a 3D WebGL view">3D</button>
     <button id="theme" title="Theme: follow system, light, or dark">Theme: auto</button>
@@ -26,7 +27,7 @@
 
     <aside class="panel" id="panel" hidden>
       <div class="panel-head">
-        <strong>Layout</strong>
+        <strong id="panel-title">Layout</strong>
         <button id="panel-close" title="Close">&times;</button>
       </div>
       <div id="controls"></div>
@@ -82,6 +83,24 @@
       hint: "Hide labels for pages with fewer links than this. 0 shows everything." }
   ];
 
+  /* The 3D view has its own, much shorter control set: most 2D sliders drive
+     a d3 force simulation that does not exist over there. Label settings are
+     shared with 2D rather than duplicated, so the toolbar button means one
+     thing everywhere. */
+  var SLIDERS_3D = [
+    { key: "nodeSize",    label: "Node size",    min: 0.4, max: 3, step: 0.1, own: true,
+      hint: "Multiplier on node size." },
+    { key: "linkOpacity", label: "Link opacity", min: 0,   max: 1, step: 0.05, own: true,
+      hint: "Fade the links back to let the nodes and labels read." },
+    { key: "labelDegree", label: "Label cutoff", min: 0,   max: 25, step: 1,
+      hint: "Hide labels for pages with fewer links than this. 0 shows everything." }
+  ];
+
+  var TOGGLES_3D = [
+    { key: "showLabels",     label: "Show labels" },
+    { key: "showUnresolved", label: "Show unresolved (broken links)" }
+  ];
+
   var TOGGLES = [
     { key: "showLabels",     label: "Show labels" },
     { key: "showUnresolved", label: "Show unresolved (broken links)" },
@@ -95,6 +114,7 @@
   var inputs = {};
 
   function buildControls() {
+    if (in3d) { build3dControls(); return; }
     controlsEl.innerHTML = "";
     var P = view.params();
 
@@ -171,6 +191,107 @@
     controlsEl.appendChild(frow);
   }
 
+  /* 3D controls. Deliberately a separate builder rather than a filtered version
+     of the 2D one: the two panels share only their look, and the 3D sliders
+     write to a different object. */
+  function build3dControls() {
+    controlsEl.innerHTML = "";
+    var P = view.params();
+    var P3 = g3d ? g3d.params() : { nodeSize: 1, linkOpacity: 0.35 };
+
+    SLIDERS_3D.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "ctl";
+      var lab = document.createElement("label");
+      lab.textContent = c.label;
+      var val = document.createElement("span");
+      val.className = "val";
+      var start = c.own ? P3[c.key] : P[c.key];
+      val.textContent = start;
+      lab.appendChild(val);
+
+      var input = document.createElement("input");
+      input.type = "range";
+      input.min = c.min; input.max = c.max; input.step = c.step;
+      input.value = start;
+      input.title = c.hint;
+      input.addEventListener("input", function () {
+        var v = parseFloat(input.value);
+        val.textContent = v;
+        if (c.own) { if (g3d) g3d.setParam(c.key, v); }
+        else { view.setParam(c.key, v); refreshLabels(); }
+      });
+
+      var hint = document.createElement("div");
+      hint.className = "hint";
+      hint.textContent = c.hint;
+      row.appendChild(lab); row.appendChild(input); row.appendChild(hint);
+      controlsEl.appendChild(row);
+    });
+
+    TOGGLES_3D.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "ctl ctl-check";
+      var lab = document.createElement("label");
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = !!P[c.key];
+      input.addEventListener("change", function () {
+        view.setParam(c.key, input.checked);
+        if (c.key === "showLabels") { refreshLabels(); paintLabelBtn(); }
+        // The unresolved toggle changes which nodes exist in 3D, not just how
+        // they look, so the filtered set has to be pushed again.
+        if (c.key === "showUnresolved") push3d(true);
+      });
+      lab.appendChild(input);
+      lab.appendChild(document.createTextNode(" " + c.label));
+      row.appendChild(lab);
+      controlsEl.appendChild(row);
+    });
+
+    var nav = document.createElement("div");
+    nav.className = "hint";
+    nav.textContent = "Drag to orbit, right-drag to pan, scroll to zoom. " +
+      "Drag a node to move and pin it; click one to open the page.";
+    controlsEl.appendChild(nav);
+  }
+
+  /* ---- labels ----
+     One setting drives both views. The toolbar button cycles the three states
+     people actually want; the panel's cutoff slider is the fine control behind
+     it, and both stay in step because they read the same parameters. */
+  var lastCutoff = 4;
+
+  function labelMode() {
+    var P = view.params();
+    if (!P.showLabels) return "off";
+    return P.labelDegree <= 0 ? "all" : "hubs";
+  }
+
+  function paintLabelBtn() {
+    var m = labelMode();
+    labelBtn.textContent = "Labels: " + m;
+    labelBtn.classList.toggle("active", m === "all");
+  }
+
+  function refreshLabels() {
+    if (!g3d || !g3d.isReady()) return;
+    var P = view.params();
+    g3d.setLabels({ show: !!P.showLabels, degree: P.labelDegree });
+  }
+
+  function setLabelMode(m) {
+    if (m === "off") {
+      view.setParam("showLabels", false);
+    } else {
+      view.setParam("showLabels", true);
+      view.setParam("labelDegree", m === "all" ? 0 : (lastCutoff || 4));
+    }
+    paintLabelBtn();
+    refreshLabels();
+    buildControls();
+  }
+
   function drawLegend() {
     legendEl.innerHTML = "";
     var folders = view.folders();
@@ -217,6 +338,15 @@
 
   /* ---- wiring ---- */
   var panel = document.getElementById("panel");
+  var labelBtn = document.getElementById("labels");
+  var CYCLE = ["hubs", "all", "off"];
+  labelBtn.addEventListener("click", function () {
+    var m = labelMode();
+    // Remember the cutoff being left behind, so coming back to "hubs" restores
+    // whatever the slider was set to rather than snapping to the default.
+    if (m === "hubs") lastCutoff = view.params().labelDegree;
+    setLabelMode(CYCLE[(CYCLE.indexOf(m) + 1) % CYCLE.length]);
+  });
   document.getElementById("toggle-panel").addEventListener("click", function () {
     panel.hidden = !panel.hidden;
   });
@@ -224,16 +354,25 @@
     panel.hidden = true;
   });
   document.getElementById("unpin").addEventListener("click", function () {
+    if (in3d) { if (g3d) g3d.unpinAll(); return; }
     view.unpinAll();
   });
   document.getElementById("defaults").addEventListener("click", function () {
-    view.resetParams();
+    // Each view resets its own settings. Resetting the 2D forces from the 3D
+    // panel would silently rearrange a layout you cannot see.
+    if (in3d) { if (g3d) g3d.resetParams(); }
+    else view.resetParams();
     buildControls();
   });
   document.getElementById("q").addEventListener("input", function (e) {
+    // Both views filter on the same string. In 2D non-matches drop out of the
+    // draw; in 3D they stay in place but dim, because removing them would
+    // re-run the layout and lose the frame you were looking at.
     view.setQuery(e.target.value);
+    if (g3d && g3d.isReady()) g3d.setQuery(e.target.value);
   });
   document.getElementById("reset").addEventListener("click", function () {
+    if (in3d) { if (g3d) g3d.fitNow(); return; }
     view.reset();
   });
   document.getElementById("refresh").addEventListener("click", function () {
@@ -259,10 +398,11 @@
     // The legend stays up in 3D: it is the colour key for what you are looking
     // at, and its folder switches drive both views.
     perfEl.hidden = on;
-    if (on) panel.hidden = true;
-    document.getElementById("toggle-panel").disabled = on;
-    document.getElementById("q").disabled = on;
-    document.getElementById("reset").disabled = on;
+    document.getElementById("panel-title").textContent = on ? "3D view" : "Layout";
+    // The panel, the search box and Fit view all mean something in 3D now, so
+    // rebuild the panel for whichever view is up rather than disabling them.
+    buildControls();
+    if (g3d) g3d.setActive(on);
     btn3d.classList.toggle("active", on);
     btn3d.textContent = on ? "2D" : "3D";
   }
@@ -311,7 +451,13 @@
     }
     var data = dataFor3d();
     (g3d.isReady() ? Promise.resolve(g3d.setData(data)) : g3d.start(data))
-      .then(function () { btn3d.disabled = false; })
+      .then(function () {
+        btn3d.disabled = false;
+        g3d.setActive(true);
+        refreshLabels();
+        g3d.setQuery(document.getElementById("q").value);
+        buildControls();
+      })
       .catch(function (e) {
         console.warn(e);
         statsEl.textContent = "3D unavailable: " + e.message;
@@ -366,6 +512,7 @@
     requestAnimationFrame(tick);
   })();
 
+  paintLabelBtn();
   buildControls();
   view.load().then(function () { view.live(); }).catch(function (e) {
     statsEl.textContent = "error: " + e.message;

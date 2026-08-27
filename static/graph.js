@@ -269,11 +269,16 @@
       }
 
       // --- labels: only what is legible and worth reading ---
+      // A cutoff of 0 means "label everything". That is an explicit request, so
+      // it also lifts the two implicit filters that otherwise hide labels: the
+      // zoom gate, and the hover focus that normally narrows labels to the
+      // hovered node and its neighbours.
       // The compact preview fits a whole space into a few hundred pixels, so
       // its resting zoom level is much lower than the full view's; gating on
       // the same 0.35 meant labels never appeared without zooming in first.
+      var showAllLabels = P.labelDegree <= 0;
       var labelZoomMin = compact ? 0.1 : 0.35;
-      if (P.showLabels && t.k > labelZoomMin) {
+      if (P.showLabels && (showAllLabels || t.k > labelZoomMin)) {
         ctx.globalAlpha = 1;
         var fs = Math.max(8.5 / t.k, 3);
         ctx.font = fs + "px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif";
@@ -282,9 +287,12 @@
         for (i = 0; i < state.nodes.length; i++) {
           var m = state.nodes[i];
           var near = state.hover && (m.id === state.hover || hot.has(m.id));
-          if (state.hover && !near) continue;
-          if (!near && m.degree < P.labelDegree) continue;
+          if (state.hover && !near && !showAllLabels) continue;
+          if (!near && !showAllLabels && m.degree < P.labelDegree) continue;
           if (hasQuery && state.queryMiss.has(m.id)) continue;
+          // With everything labelled, hovering still has to read as focus, so
+          // push the rest back rather than hiding them.
+          ctx.globalAlpha = (state.hover && !near) ? 0.3 : 1;
           ctx.fillStyle = near ? theme.fg : theme.muted;
           ctx.fillText(m.title, m.x, m.y - radius(m) - 2 / t.k);
         }

@@ -7,7 +7,29 @@
   "use strict";
 
   var SCRIPT = "static/vendor/3d-force-graph.min.js";
+  var STORE_KEY = "sb-graph:3d";
+  var DEFAULTS = { nodeSize: 1, linkOpacity: 0.35 };
   var loading = null;
+
+  /* The 3D panel says settings are saved in this browser, same as the 2D one,
+     so they have to actually be. */
+  function loadParams() {
+    var out = Object.assign({}, DEFAULTS);
+    try {
+      var raw = global.localStorage && global.localStorage.getItem(STORE_KEY);
+      if (raw) {
+        var got = JSON.parse(raw);
+        for (var k in DEFAULTS) if (typeof got[k] === "number") out[k] = got[k];
+      }
+    } catch (e) { /* corrupt or blocked storage is not worth failing over */ }
+    return out;
+  }
+
+  function saveParams(P) {
+    try {
+      if (global.localStorage) global.localStorage.setItem(STORE_KEY, JSON.stringify(P));
+    } catch (e) { /* non-fatal */ }
+  }
 
   /* Load the vendor bundle once, at most. Returns the same promise to every
      caller so a double-click on the toggle cannot start two downloads. */
@@ -37,12 +59,13 @@
     }
     return {
       bg: v("--bg", "#ffffff"),
+      fg: v("--fg", "#23262b"),
       link: v("--link", "#b9bfc9"),
       muted: v("--muted", "#6b7280")
     };
   }
 
-  /* opts: { container, sbUrl, folderColour, onClose } */
+  /* opts: { container, sbUrl, folderColour } */
   function Graph3D(opts) {
     var el = typeof opts.container === "string"
       ? document.querySelector(opts.container) : opts.container;
@@ -50,11 +73,130 @@
     var current = { nodes: [], links: [] };
     var destroyed = false;
     var fitPending = true;
+    var active = false;
 
+    // View settings that belong to 3D alone. Labels are deliberately NOT here:
+    // one label setting drives both views, so the toolbar button means the same
+    // thing wherever you press it.
+    var P = loadParams();
+    var labels = { show: true, degree: 4 };
+    var query = "";
+    var miss = null;          // null = no query; otherwise ids that do not match
+
+    /* ---- label overlay -------------------------------------------------
+       The bundle exports only ForceGraph3D, not the THREE namespace it embeds,
+       so there is no way to build text sprites from here. Projecting node
+       positions onto a plain 2D canvas laid over the WebGL one gets the same
+       result, costs no extra dependency, and reuses the 2D view's typography
+       and theme colours. */
+    var over = document.createElement("canvas");
+    over.className = "g3d-labels";
+    var octx = over.getContext("2d");
+    var rafId = 0;
+    var camDir = null;        // reused THREE.Vector3, cloned off the camera
+
+    function overlaySize() {
+      var r = el.getBoundingClientRect();
+      var dpr = global.devicePixelRatio || 1;
+      var w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
+      if (over.width !== w * dpr || over.height !== h * dpr) {
+        over.width = w * dpr; over.height = h * dpr;
+        over.style.width = w + "px"; over.style.height = h + "px";
+      }
+      octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { w: w, h: h };
+    }
+
+    function drawLabels() {
+      var size = overlaySize();
+      octx.clearRect(0, 0, size.w, size.h);
+      if (!fg || !labels.show) return;
+
+      var cam = fg.camera();
+      if (!cam || !cam.position) return;
+      // getWorldDirection needs a THREE.Vector3 to write into and we have no
+      // constructor, so borrow one by cloning the camera's own position vector.
+      if (!camDir) camDir = cam.position.clone();
+      cam.getWorldDirection(camDir);
+      var cx = cam.position.x, cy = cam.position.y, cz = cam.position.z;
+
+      var showAll = labels.degree <= 0;
+      var out = [], i, n, d;
+      for (i = 0; i < current.nodes.length; i++) {
+        n = current.nodes[i];
+        if (n.x === undefined) continue;                       // not laid out yet
+        if (!showAll && (n.degree || 0) < labels.degree) continue;
+        if (miss && miss[n.id]) continue;
+        // Depth along the view axis. Negative means the node is behind the
+        // camera, where projection mirrors it to a plausible-looking but wrong
+        // screen position.
+        d = (n.x - cx) * camDir.x + (n.y - cy) * camDir.y + (n.z - cz) * camDir.z;
+        if (d <= 0) continue;
+        var p = fg.graph2ScreenCoords(n.x, n.y, n.z);
+        if (!p || p.x < -60 || p.y < -20 || p.x > size.w + 60 || p.y > size.h + 20) continue;
+        out.push({ n: n, x: p.x, y: p.y, d: d });
+      }
+      if (!out.length) return;
+
+      // Depth cue: near labels solid, far ones faded. Painting far-to-near also
+      // means a near label wins any overlap.
+      var lo = Infinity, hi = 0;
+      for (i = 0; i < out.length; i++) {
+        if (out[i].d < lo) lo = out[i].d;
+        if (out[i].d > hi) hi = out[i].d;
+      }
+      var span = (hi - lo) || 1;
+      out.sort(function (a, b) { return b.d - a.d; });
+
+      var t = themeColours();
+      octx.font = "11px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif";
+      octx.textAlign = "center";
+      octx.textBaseline = "bottom";
+      octx.lineJoin = "round";
+      octx.lineWidth = 3;
+      for (i = 0; i < out.length; i++) {
+        var o = out[i];
+        octx.globalAlpha = 1 - 0.62 * ((o.d - lo) / span);
+        // Halo in the background colour: without it, text sitting on a bundle
+        // of links is unreadable.
+        octx.strokeStyle = t.bg;
+        octx.strokeText(o.n.title || o.n.id, o.x, o.y - 6);
+        octx.fillStyle = t.fg;
+        octx.fillText(o.n.title || o.n.id, o.x, o.y - 6);
+      }
+      octx.globalAlpha = 1;
+    }
+
+    /* The overlay has to repaint on every camera move, and orbiting emits no
+       event, so it rides a frame loop. The loop only runs while the 3D view is
+       on screen and labels are wanted. */
+    function tick() {
+      rafId = 0;
+      if (destroyed || !active) return;
+      drawLabels();
+      rafId = global.requestAnimationFrame(tick);
+    }
+    function startLoop() {
+      if (rafId || destroyed || !active) return;
+      rafId = global.requestAnimationFrame(tick);
+    }
+    function stopLoop() {
+      if (rafId) { global.cancelAnimationFrame(rafId); rafId = 0; }
+      if (octx) {
+        var size = overlaySize();
+        octx.clearRect(0, 0, size.w, size.h);
+      }
+    }
+
+    /* ---- appearance ---------------------------------------------------- */
     function colourFor(n) {
-      if (!n.exists) return themeColours().muted;
+      var t = themeColours();
+      if (miss && miss[n.id]) return t.link;   // dimmed, not hidden
+      if (!n.exists) return t.muted;
       return opts.folderColour ? opts.folderColour(n.folder) : "#7c9fe8";
     }
+
+    function valFor(n) { return (1 + (n.degree || 0) * 0.6) * P.nodeSize; }
 
     function start(data) {
       return loadLib().then(function (ForceGraph3D) {
@@ -65,10 +207,10 @@
           .showNavInfo(false)
           .nodeLabel(function (n) { return n.id; })
           .nodeColor(colourFor)
-          .nodeVal(function (n) { return 1 + (n.degree || 0) * 0.6; })
+          .nodeVal(valFor)
           .nodeOpacity(0.92)
           .linkColor(function () { return t.link; })
-          .linkOpacity(0.35)
+          .linkOpacity(P.linkOpacity)
           .linkWidth(0.4)
           .warmupTicks(40)
           .cooldownTime(6000)
@@ -89,8 +231,12 @@
           // view offers, and the only way to hand-arrange a 3D layout.
           .onNodeDragEnd(function (n) { n.fx = n.x; n.fy = n.y; n.fz = n.z; });
 
+        // Appended after the library has built its own canvas so it stacks on
+        // top without needing a z-index fight.
+        el.appendChild(over);
         setData(data);
         resize();
+        startLoop();
         return fg;
       });
     }
@@ -105,7 +251,68 @@
           return { source: l.source, target: l.target, unresolved: l.unresolved };
         })
       };
+      applyQuery();
       if (fg) fg.graphData(current);
+    }
+
+    function applyQuery() {
+      if (!query) { miss = null; return; }
+      miss = {};
+      for (var i = 0; i < current.nodes.length; i++) {
+        var n = current.nodes[i];
+        if (n.id.toLowerCase().indexOf(query) === -1) miss[n.id] = true;
+      }
+    }
+
+    function setQuery(q) {
+      query = (q || "").trim().toLowerCase();
+      applyQuery();
+      if (fg) fg.nodeColor(colourFor);   // reassigning the accessor repaints
+    }
+
+    function setParam(key, value) {
+      if (!(key in P)) return;
+      P[key] = value;
+      saveParams(P);
+      applyParams();
+    }
+
+    function applyParams() {
+      if (!fg) return;
+      fg.nodeVal(valFor).linkOpacity(P.linkOpacity);
+    }
+
+    function params() { return Object.assign({}, P); }
+
+    function resetParams() {
+      P = Object.assign({}, DEFAULTS);
+      saveParams(P);
+      applyParams();
+    }
+
+    /* Dragging in 3D pins, and the 2D view's Unpin all cannot reach these
+       nodes: they are copies, and they carry an fz the 2D simulation has no
+       concept of. */
+    function unpinAll() {
+      for (var i = 0; i < current.nodes.length; i++) {
+        var n = current.nodes[i];
+        n.fx = null; n.fy = null; n.fz = null;
+      }
+      if (fg) fg.d3ReheatSimulation();
+    }
+
+    function setLabels(next) {
+      if (typeof next.show === "boolean") labels.show = next.show;
+      if (typeof next.degree === "number") labels.degree = next.degree;
+      if (labels.show && active) startLoop(); else stopLoop();
+    }
+
+    /* Called when the 3D view comes on or off screen. A hidden container
+       measures 0x0, so the overlay must not keep painting into it. */
+    function setActive(on) {
+      active = !!on;
+      if (active) { resize(); if (labels.show) startLoop(); }
+      else stopLoop();
     }
 
     /* Re-frame on the next settle. Called when the visible set changes enough
@@ -113,10 +320,15 @@
        off in the legend. */
     function refit() { fitPending = true; }
 
+    /* Re-frame right now, for the toolbar's Fit view button: waiting for a
+       settle that may never come again would make the button look broken. */
+    function fitNow() { if (fg) fg.zoomToFit(600, 20); }
+
     function resize() {
       if (!fg || !el) return;
       var r = el.getBoundingClientRect();
       if (r.width && r.height) fg.width(r.width).height(r.height);
+      overlaySize();
     }
 
     function repaintTheme() {
@@ -129,6 +341,7 @@
 
     function destroy() {
       destroyed = true;
+      stopLoop();
       if (fg) {
         // _destructor releases the WebGL context. Without it, toggling in and
         // out of 3D leaks a renderer per visit and the browser eventually drops
@@ -142,8 +355,16 @@
     return {
       start: start,
       setData: setData,
+      setQuery: setQuery,
+      setParam: setParam,
+      params: params,
+      resetParams: resetParams,
+      unpinAll: unpinAll,
+      setLabels: setLabels,
+      setActive: setActive,
       resize: resize,
       refit: refit,
+      fitNow: fitNow,
       repaintTheme: repaintTheme,
       destroy: destroy,
       isReady: function () { return !!fg; }

@@ -288,3 +288,13 @@ body.embed #graph { position: absolute; inset: 0; }
 
   .embed-bar { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 16px); }
 }
+
+/* 3D label overlay. The vendor bundle exports only ForceGraph3D, with no way
+   to reach the THREE namespace it embeds, so labels are projected onto a plain
+   2D canvas stacked over the WebGL one. It must never eat a mouse event: every
+   orbit, drag and click belongs to the renderer underneath. */
+.g3d-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}

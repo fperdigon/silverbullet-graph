@@ -123,28 +123,37 @@
       var cx = cam.position.x, cy = cam.position.y, cz = cam.position.z;
 
       var showAll = labels.mode === "all";
-      // 3D has no zoom factor, so the camera's distance from the graph stands in
-      // for one: half the fitted distance reads as twice the zoom. Expressed
-      // against the same fitted reference the 2D view uses, so both reveal the
-      // same labels at the same apparent scale.
-      var lvl = Infinity;
-      if (!showAll) {
-        var here = Math.hypot(cx - centre.x, cy - centre.y, cz - centre.z);
-        var zf = (fitDist && here) ? fitDist / here : 1;
-        lvl = global.SBGraphLOD.level(zf, labels.density);
-      }
-
+      // 3D has no single zoom factor, so distance from the camera stands in for
+      // one: half the fitted distance reads as twice the zoom, measured against
+      // the same fitted reference the 2D view uses.
+      //
+      // The distance is taken **per node**, not from the camera to the graph as
+      // a whole. That is the difference between a 3D view and a 2D one: flying
+      // into a cluster brings you close to a handful of nodes and no closer to
+      // the rest, so a shared threshold would label the entire far side of the
+      // graph at the same time and bury the thing you flew in to read. Here a
+      // node you have come close to labels itself, and a distant one stays
+      // silent unless it is high enough in the hierarchy to earn a label from
+      // far away.
       var out = [], i, n, d;
       for (i = 0; i < current.nodes.length; i++) {
         n = current.nodes[i];
         if (n.x === undefined) continue;                       // not laid out yet
-        if (n.labelScore > lvl) continue;
         if (miss && miss[n.id]) continue;
+        var ex = n.x - cx, ey = n.y - cy, ez = n.z - cz;
         // Depth along the view axis. Negative means the node is behind the
         // camera, where projection mirrors it to a plausible-looking but wrong
         // screen position.
-        d = (n.x - cx) * camDir.x + (n.y - cy) * camDir.y + (n.z - cz) * camDir.z;
+        d = ex * camDir.x + ey * camDir.y + ez * camDir.z;
         if (d <= 0) continue;
+        if (!showAll) {
+          // True distance to this node, not its depth along the view axis: a
+          // node off to the side of a close-up shot is further away than the
+          // axis suggests, and should label like it.
+          var away = Math.hypot(ex, ey, ez);
+          var zf = fitDist ? fitDist / Math.max(away, 1e-3) : 1;
+          if (n.labelScore > global.SBGraphLOD.level(zf, labels.density)) continue;
+        }
         var p = fg.graph2ScreenCoords(n.x, n.y, n.z);
         if (!p || p.x < -60 || p.y < -20 || p.x > size.w + 60 || p.y > size.h + 20) continue;
         out.push({ n: n, x: p.x, y: p.y, d: d });

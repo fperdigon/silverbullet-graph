@@ -27,8 +27,9 @@ Tested against SilverBullet **2.9.0**.
 - **Labels that follow the hierarchy.** Zoomed out you see the top of the tree;
   zoom in and each folder level below appears in turn. One toolbar button cycles
   auto, every label, or none, and means the same thing in both views. In 3D the
-  camera's distance stands in for zoom, and labels are projected onto an overlay
-  canvas and fade with distance.
+  distance to each node stands in for zoom, so flying into a cluster labels what
+  you came to read without labelling the far side of the graph. Labels are
+  projected onto an overlay canvas and fade with distance.
 - **Clickable legend.** Click a folder's colour to drop it out of the layout;
   the rest re-settles into the space it freed. Click again to bring it back.
 - **Embeddable preview** you can drop into your index page with a Space Lua widget.

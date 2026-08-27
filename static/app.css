@@ -137,6 +137,11 @@ button.active { border-color: var(--accent); color: var(--accent); }
   padding: 10px 12px 12px;
 }
 .panel[hidden] { display: none; }
+/* The 3D camera pad is pinned to the same bottom-right corner the panel grows
+   into. On a short window the pad covered the panel's last rows, which is where
+   the toggles live, so options simply vanished. The panel already scrolls;
+   shortening it is enough. */
+.panel.with-pad { max-height: calc(100% - 190px); }
 
 .panel-head {
   display: flex;
@@ -357,15 +362,36 @@ body.embed #graph { position: absolute; inset: 0; }
   .campad-keys div:last-child { display: none; }
 }
 
-/* Panel select, matched to the range inputs beside it. */
-.ctl select {
-  width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--fg);
-  border-radius: 5px;
-  padding: 3px 6px;
-  font: inherit;
-  font-size: 12px;
+/* ---------- panel sections and radios ---------- */
+.ctl-head {
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-bottom: 8px;
 }
-.ctl select:focus { outline: none; border-color: var(--accent); }
+/* The first section heads the panel, where the panel's own title already draws
+   a line; a second rule above it reads as a stray divider. */
+.ctl-head:first-child { border-top: none; padding-top: 0; }
+
+/* Radios rather than a dropdown: with two mutually exclusive options that are
+   the point of the panel, a closed dropdown hides the one you are not on. */
+/* Specificity note: `.ctl label` sets justify-content: space-between for the
+   name/value rows, which would push a radio's text to the far edge. This has to
+   out-specify it, hence label.ctl-radio rather than .ctl-radio. */
+.ctl label.ctl-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-start;
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+.ctl label.ctl-radio input { accent-color: var(--accent); margin: 0; flex: 0 0 auto; }
+/* Indented to sit under its own option rather than reading as a note on the
+   whole group. */
+.hint-radio { margin-left: 19px; margin-top: 1px; }

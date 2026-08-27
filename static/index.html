@@ -27,7 +27,7 @@
 
     <aside class="panel" id="panel" hidden>
       <div class="panel-head">
-        <strong id="panel-title">Layout</strong>
+        <strong id="panel-title">Controls</strong>
         <button id="panel-close" title="Close">&times;</button>
       </div>
       <div id="controls"></div>
@@ -90,7 +90,12 @@
     }
   });
 
-  /* ---- layout controls ---- */
+  /* ---- controls panel ----
+     Ordered by what people reach for, not by what the renderer cares about.
+     Label settings sit at the top: they are what the toolbar button configures,
+     and when they lived below seven layout sliders in an 800px-tall panel they
+     were simply not found - the same controls read as "3D only", because the 3D
+     panel is short enough to show them without scrolling. */
   var SLIDERS = [
     { key: "charge",       label: "Repulsion",     min: -800, max: -20, step: 10,
       hint: "How hard nodes push each other apart. More negative spreads the graph out." },
@@ -103,72 +108,30 @@
     { key: "gravity",      label: "Gravity",       min: 0,   max: 0.3, step: 0.01,
       hint: "Pull toward the centre. Raise it to gather orphan pages in." },
     { key: "nodeScale",    label: "Node size",     min: 0.4, max: 3,   step: 0.1,
-      hint: "Multiplier on node radius." },
-    { key: "labelDensity", label: "Label density", min: -2, max: 2, step: 0.25,
-      hint: "Shifts how early labels appear as you zoom in. Negative is sparser, positive denser. Ignored when labels are set to all." }
+      hint: "Multiplier on node radius." }
   ];
 
-  /* The 3D view has its own, much shorter control set: most 2D sliders drive
-     a d3 force simulation that does not exist over there. Label settings are
-     shared with 2D rather than duplicated, so the toolbar button means one
-     thing everywhere. */
+  /* The 3D view has its own, much shorter set: most 2D sliders drive a d3 force
+     simulation that does not exist over there. */
   var SLIDERS_3D = [
     { key: "nodeSize",    label: "Node size",    min: 0.4, max: 3, step: 0.1, own: true,
       hint: "Multiplier on node size." },
     { key: "linkOpacity", label: "Link opacity", min: 0,   max: 1, step: 0.05, own: true,
-      hint: "Fade the links back to let the nodes and labels read." },
-    { key: "labelDensity", label: "Label density", min: -2, max: 2, step: 0.25,
-      hint: "Shifts how early labels appear as the camera closes in. Negative is sparser, positive denser." }
+      hint: "Fade the links back to let the nodes and labels read." }
   ];
 
-  var TOGGLES_3D = [
-    { key: "showUnresolved", label: "Show unresolved (broken links)" }
+  var DENSITY = { key: "labelDensity", label: "Label density", min: -2, max: 2, step: 0.25,
+    hint: "Shifts how early labels appear as you zoom in. Negative is sparser, positive denser. Ignored when labels are set to all." };
+
+  /* Both orderings ship; this picks what a tier means. Radios rather than a
+     dropdown: there are two of them, they are the point of the panel, and a
+     closed dropdown hides the choice you are not on. */
+  var RANKS = [
+    { v: "depth", t: "Folder depth",
+      hint: "Root pages first, then each level below." },
+    { v: "links", t: "Link count",
+      hint: "Most-linked first, wherever it sits in the tree." }
   ];
-
-  /* Both label orderings ship; this picks which one a tier means. Shared by
-     the 2D and 3D panels, like every other label setting. */
-  var SELECTS = [
-    { key: "labelRank", label: "Label order",
-      options: [
-        { v: "depth", t: "Folder depth" },
-        { v: "links", t: "Link count" }
-      ],
-      hint: "Folder depth labels root pages first, then each level below. " +
-            "Link count labels the most-linked pages first wherever they sit in the tree." }
-  ];
-
-  function buildSelects(host) {
-    var P = view.params();
-    SELECTS.forEach(function (c) {
-      var row = document.createElement("div");
-      row.className = "ctl";
-
-      var lab = document.createElement("label");
-      lab.textContent = c.label;
-
-      var sel = document.createElement("select");
-      c.options.forEach(function (o) {
-        var opt = document.createElement("option");
-        opt.value = o.v;
-        opt.textContent = o.t;
-        sel.appendChild(opt);
-      });
-      sel.value = P[c.key];
-      sel.addEventListener("change", function () {
-        view.setParam(c.key, sel.value);
-        refreshLabels();
-      });
-
-      var hint = document.createElement("div");
-      hint.className = "hint";
-      hint.textContent = c.hint;
-
-      row.appendChild(lab);
-      row.appendChild(sel);
-      row.appendChild(hint);
-      host.appendChild(row);
-    });
-  }
 
   var TOGGLES = [
     { key: "showUnresolved", label: "Show unresolved (broken links)" },
@@ -178,71 +141,128 @@
             "empty space to unpin everything." }
   ];
 
+  var TOGGLES_3D = [
+    { key: "showUnresolved", label: "Show unresolved (broken links)" }
+  ];
+
   var controlsEl = document.getElementById("controls");
-  var inputs = {};
+
+  function sectionHead(text) {
+    var h = document.createElement("div");
+    h.className = "ctl-head";
+    h.textContent = text;
+    return h;
+  }
+
+  function makeSlider(c, host) {
+    var P = view.params();
+    var P3 = g3d ? g3d.params() : { nodeSize: 1, linkOpacity: 0.35 };
+    var start = c.own ? P3[c.key] : P[c.key];
+
+    var row = document.createElement("div");
+    row.className = "ctl";
+
+    var lab = document.createElement("label");
+    lab.textContent = c.label;
+    var val = document.createElement("span");
+    val.className = "val";
+    val.textContent = start;
+    lab.appendChild(val);
+
+    var input = document.createElement("input");
+    input.type = "range";
+    input.min = c.min; input.max = c.max; input.step = c.step;
+    input.value = start;
+    input.title = c.hint;
+    input.addEventListener("input", function () {
+      var v = parseFloat(input.value);
+      val.textContent = v;
+      if (c.own) { if (g3d) g3d.setParam(c.key, v); }
+      else { view.setParam(c.key, v); refreshLabels(); }
+    });
+
+    var hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = c.hint;
+
+    row.appendChild(lab);
+    row.appendChild(input);
+    row.appendChild(hint);
+    host.appendChild(row);
+  }
+
+  function makeToggle(c, host, onChange) {
+    var P = view.params();
+    var row = document.createElement("div");
+    row.className = "ctl ctl-check";
+    var lab = document.createElement("label");
+    var input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!P[c.key];
+    input.addEventListener("change", function () {
+      view.setParam(c.key, input.checked);
+      if (onChange) onChange(c.key);
+    });
+    lab.appendChild(input);
+    lab.appendChild(document.createTextNode(" " + c.label));
+    row.appendChild(lab);
+    if (c.hint) {
+      var h = document.createElement("div");
+      h.className = "hint";
+      h.textContent = c.hint;
+      row.appendChild(h);
+    }
+    host.appendChild(row);
+  }
+
+  /* Label settings, identical in both panels: one set of parameters drives both
+     views, so showing two different panels' worth would invite them to drift. */
+  function buildLabelGroup(host) {
+    var P = view.params();
+    host.appendChild(sectionHead("Labels"));
+
+    var row = document.createElement("div");
+    row.className = "ctl";
+    var lab = document.createElement("label");
+    lab.textContent = "Label order";
+    row.appendChild(lab);
+
+    RANKS.forEach(function (o) {
+      var wrap = document.createElement("label");
+      wrap.className = "ctl-radio";
+      var input = document.createElement("input");
+      input.type = "radio";
+      input.name = "labelRank";
+      input.value = o.v;
+      input.checked = P.labelRank === o.v;
+      input.addEventListener("change", function () {
+        if (!input.checked) return;
+        view.setParam("labelRank", o.v);
+        refreshLabels();
+      });
+      wrap.appendChild(input);
+      wrap.appendChild(document.createTextNode(" " + o.t));
+      row.appendChild(wrap);
+
+      var h = document.createElement("div");
+      h.className = "hint hint-radio";
+      h.textContent = o.hint;
+      row.appendChild(h);
+    });
+    host.appendChild(row);
+
+    makeSlider(DENSITY, host);
+  }
 
   function buildControls() {
     if (in3d) { build3dControls(); return; }
     controlsEl.innerHTML = "";
-    var P = view.params();
 
-    SLIDERS.forEach(function (c) {
-      var row = document.createElement("div");
-      row.className = "ctl";
+    buildLabelGroup(controlsEl);
 
-      var lab = document.createElement("label");
-      lab.textContent = c.label;
-      var val = document.createElement("span");
-      val.className = "val";
-      val.textContent = P[c.key];
-      lab.appendChild(val);
-
-      var input = document.createElement("input");
-      input.type = "range";
-      input.min = c.min; input.max = c.max; input.step = c.step;
-      input.value = P[c.key];
-      input.title = c.hint;
-      input.addEventListener("input", function () {
-        var v = parseFloat(input.value);
-        val.textContent = v;
-        view.setParam(c.key, v);
-      });
-
-      var hint = document.createElement("div");
-      hint.className = "hint";
-      hint.textContent = c.hint;
-
-      row.appendChild(lab);
-      row.appendChild(input);
-      row.appendChild(hint);
-      controlsEl.appendChild(row);
-      inputs[c.key] = { input: input, val: val };
-    });
-
-    buildSelects(controlsEl);
-
-    TOGGLES.forEach(function (c) {
-      var row = document.createElement("div");
-      row.className = "ctl ctl-check";
-      var lab = document.createElement("label");
-      var input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = !!P[c.key];
-      input.addEventListener("change", function () {
-        view.setParam(c.key, input.checked);
-      });
-      lab.appendChild(input);
-      lab.appendChild(document.createTextNode(" " + c.label));
-      row.appendChild(lab);
-      if (c.hint) {
-        var h = document.createElement("div");
-        h.className = "hint";
-        h.textContent = c.hint;
-        row.appendChild(h);
-      }
-      controlsEl.appendChild(row);
-      inputs[c.key] = { input: input };
-    });
+    controlsEl.appendChild(sectionHead("Layout"));
+    SLIDERS.forEach(function (c) { makeSlider(c, controlsEl); });
+    TOGGLES.forEach(function (c) { makeToggle(c, controlsEl); });
 
     // Freeze is view state, not a saved layout parameter.
     var frow = document.createElement("div");
@@ -261,63 +281,19 @@
     controlsEl.appendChild(frow);
   }
 
-  /* 3D controls. Deliberately a separate builder rather than a filtered version
-     of the 2D one: the two panels share only their look, and the 3D sliders
-     write to a different object. */
   function build3dControls() {
     controlsEl.innerHTML = "";
-    var P = view.params();
-    var P3 = g3d ? g3d.params() : { nodeSize: 1, linkOpacity: 0.35 };
 
-    SLIDERS_3D.forEach(function (c) {
-      var row = document.createElement("div");
-      row.className = "ctl";
-      var lab = document.createElement("label");
-      lab.textContent = c.label;
-      var val = document.createElement("span");
-      val.className = "val";
-      var start = c.own ? P3[c.key] : P[c.key];
-      val.textContent = start;
-      lab.appendChild(val);
+    buildLabelGroup(controlsEl);
 
-      var input = document.createElement("input");
-      input.type = "range";
-      input.min = c.min; input.max = c.max; input.step = c.step;
-      input.value = start;
-      input.title = c.hint;
-      input.addEventListener("input", function () {
-        var v = parseFloat(input.value);
-        val.textContent = v;
-        if (c.own) { if (g3d) g3d.setParam(c.key, v); }
-        else { view.setParam(c.key, v); refreshLabels(); }
-      });
-
-      var hint = document.createElement("div");
-      hint.className = "hint";
-      hint.textContent = c.hint;
-      row.appendChild(lab); row.appendChild(input); row.appendChild(hint);
-      controlsEl.appendChild(row);
-    });
-
-    buildSelects(controlsEl);
-
+    controlsEl.appendChild(sectionHead("View"));
+    SLIDERS_3D.forEach(function (c) { makeSlider(c, controlsEl); });
     TOGGLES_3D.forEach(function (c) {
-      var row = document.createElement("div");
-      row.className = "ctl ctl-check";
-      var lab = document.createElement("label");
-      var input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = !!P[c.key];
-      input.addEventListener("change", function () {
-        view.setParam(c.key, input.checked);
+      makeToggle(c, controlsEl, function (key) {
         // The unresolved toggle changes which nodes exist in 3D, not just how
         // they look, so the filtered set has to be pushed again.
-        if (c.key === "showUnresolved") push3d(true);
+        if (key === "showUnresolved") push3d(true);
       });
-      lab.appendChild(input);
-      lab.appendChild(document.createTextNode(" " + c.label));
-      row.appendChild(lab);
-      controlsEl.appendChild(row);
     });
 
     var nav = document.createElement("div");
@@ -329,12 +305,15 @@
     controlsEl.appendChild(nav);
   }
 
+
   /* ---- labels ----
      One setting drives both views. The toolbar button cycles the three states
      people actually want; the panel's cutoff slider is the fine control behind
      it, and both stay in step because they read the same parameters. */
+  // "auto" no longer means one fixed ordering, so the tooltip must not claim it
+  // does; which order is in force is the panel's business.
   var LABEL_HINT = {
-    auto: "Labels follow the folder hierarchy as you zoom: root pages first, then each level below",
+    auto: "Labels arrive in tiers as you zoom in. Set the order in Controls",
     all: "Every label, at every zoom",
     off: "No labels"
   };
@@ -462,11 +441,13 @@
   function set3dChrome(on) {
     graph2dEl.classList.toggle("offstage", on);
     campad.hidden = !on;
+    // Keep the panel clear of the pad; see .panel.with-pad.
+    panel.classList.toggle("with-pad", on);
     graph3dEl.hidden = !on;
     // The legend stays up in 3D: it is the colour key for what you are looking
     // at, and its folder switches drive both views.
     perfEl.hidden = on;
-    document.getElementById("panel-title").textContent = on ? "3D view" : "Layout";
+    document.getElementById("panel-title").textContent = on ? "3D view" : "Controls";
     // The panel, the search box and Fit view all mean something in 3D now, so
     // rebuild the panel for whichever view is up rather than disabling them.
     buildControls();

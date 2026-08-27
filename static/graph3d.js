@@ -320,21 +320,55 @@
        off in the legend. */
     function refit() { fitPending = true; }
 
-    /* Frame the connected core, not the bounding box of everything.
-       A space's isolated pages drift far out on gravity alone, and including
-       them in a 3D bounding-sphere fit pushed the camera so far back that the
-       graph you came to look at rendered as a knot of 2px dots in the middle of
-       an empty frame. Isolated nodes are still there, just outside the opening
-       frame; scroll out and they are where you would expect. */
+    /* Frame the graph properly. The library's own zoomToFit is not usable
+       here for two reasons, both visible on a 372-node space: it measures the
+       extent from the world origin rather than from where the graph actually
+       is, and its distance formula divides by atan(fov) where the geometry
+       calls for tan(fov/2). Together those opened the homelab graph as a knot
+       of 2px dots in the middle of an empty frame.
+
+       This fit takes the centroid, uses a 97th-percentile radius so a handful
+       of weakly-linked pages flung out by repulsion cannot dictate the zoom for
+       everything else, and keeps whatever direction the camera is already
+       looking from. The strays are still there; you just have to scroll out to
+       them instead of starting there. */
     function fit(ms) {
       if (!fg) return;
-      var linked = 0, i;
+      var pts = [], i, n;
       for (i = 0; i < current.nodes.length; i++) {
-        if ((current.nodes[i].degree || 0) > 0) linked++;
+        n = current.nodes[i];
+        if (typeof n.x === "number") pts.push(n);
       }
-      // A space with no links at all, or almost none, has no core to frame.
-      if (linked < 3) { fg.zoomToFit(ms, 20); return; }
-      fg.zoomToFit(ms, 20, function (n) { return (n.degree || 0) > 0; });
+      if (pts.length < 3) { fg.zoomToFit(ms, 20); return; }
+
+      var cx = 0, cy = 0, cz = 0;
+      for (i = 0; i < pts.length; i++) { cx += pts[i].x; cy += pts[i].y; cz += pts[i].z; }
+      cx /= pts.length; cy /= pts.length; cz /= pts.length;
+
+      var d = [];
+      for (i = 0; i < pts.length; i++) {
+        d.push(Math.hypot(pts[i].x - cx, pts[i].y - cy, pts[i].z - cz));
+      }
+      d.sort(function (a, b) { return a - b; });
+      var R = d[Math.min(d.length - 1, Math.floor(d.length * 0.97))] || d[d.length - 1];
+      if (!R) { fg.zoomToFit(ms, 20); return; }
+
+      var cam = fg.camera();
+      var half = (cam.fov || 50) * Math.PI / 360;      // half the vertical fov
+      // The horizontal field is the wider one on any landscape viewport, so the
+      // vertical is what actually binds; 1.1 leaves a margin rather than
+      // pressing the outermost node against the edge.
+      var dist = (R / Math.tan(half)) * 1.1;
+
+      var vx = cam.position.x - cx, vy = cam.position.y - cy, vz = cam.position.z - cz;
+      var len = Math.hypot(vx, vy, vz);
+      if (!len) { vx = 0; vy = 0; vz = 1; len = 1; }
+      var centre = { x: cx, y: cy, z: cz };
+      fg.cameraPosition({
+        x: cx + (vx / len) * dist,
+        y: cy + (vy / len) * dist,
+        z: cz + (vz / len) * dist
+      }, centre, ms);
     }
 
     /* Re-frame right now, for the toolbar's Fit view button: waiting for a
